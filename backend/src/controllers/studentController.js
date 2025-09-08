@@ -1,4 +1,5 @@
-const { Student, User, Course } = require('../models');
+const { Student, User, Course, Department } = require('../models');
+const { Op } = require('sequelize');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 const path = require('path');
@@ -8,7 +9,15 @@ const path = require('path');
 // @access  Private/Admin or Faculty
 exports.getStudents = async (req, res, next) => {
   try {
-    const students = await Student.find().populate('user', 'name email');
+    const students = await Student.findAll({
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email']
+        }
+      ]
+    });
     
     res.status(200).json({
       success: true,
@@ -25,9 +34,21 @@ exports.getStudents = async (req, res, next) => {
 // @access  Private
 exports.getStudent = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id)
-      .populate('user', 'name email contactNumber department')
-      .populate('courses', 'code name credits');
+    const student = await Student.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Course,
+          as: 'courses',
+          attributes: ['code', 'name', 'credits'],
+          through: { attributes: [] }
+        }
+      ]
+    });
     
     if (!student) {
       return next(
@@ -38,7 +59,7 @@ exports.getStudent = async (req, res, next) => {
     // Check if the requester is the student or has proper role
     if (
       req.user.role === 'student' && 
-      student.user._id.toString() !== req.user.id && 
+      student.user.id.toString() !== req.user.id && 
       req.user.role !== 'admin' && 
       req.user.role !== 'faculty'
     ) {
@@ -61,7 +82,7 @@ exports.getStudent = async (req, res, next) => {
 // @access  Private
 exports.getStudentAttendance = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -72,7 +93,7 @@ exports.getStudentAttendance = async (req, res, next) => {
     // Check if the requester is the student or has proper role
     if (
       req.user.role === 'student' && 
-      student.user.toString() !== req.user.id && 
+      student.userId.toString() !== req.user.id && 
       req.user.role !== 'admin' && 
       req.user.role !== 'faculty'
     ) {
@@ -95,7 +116,7 @@ exports.getStudentAttendance = async (req, res, next) => {
 // @access  Private
 exports.getStudentGrades = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -129,7 +150,7 @@ exports.getStudentGrades = async (req, res, next) => {
 // @access  Private/Student only their own
 exports.submitAssignment = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -176,7 +197,7 @@ exports.submitAssignment = async (req, res, next) => {
 // @access  Private/Student only
 exports.submitAssignmentWithFile = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -241,7 +262,7 @@ exports.submitAssignmentWithFile = async (req, res, next) => {
 // @access  Private/Admin only
 exports.registerCourse = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -249,7 +270,7 @@ exports.registerCourse = async (req, res, next) => {
       );
     }
 
-    const course = await Course.findById(req.params.courseId);
+    const course = await Course.findByPk(req.params.courseId);
     
     if (!course) {
       return next(
@@ -287,21 +308,107 @@ exports.registerCourse = async (req, res, next) => {
 exports.createStudent = async (req, res, next) => {
   try {
     const {
+      // User fields
       name,
       email,
       password,
+      contactNumber,
+      addressStreet,
+      addressCity,
+      addressState,
+      addressPincode,
+      addressCountry = 'India',
+      
+      // Student identification
       enrollmentNumber,
+      studentId,
+      rollNumber,
+      
+      // Academic details
       batch,
       program,
-      currentSemester,
+      admissionYear,
+      currentSemester = 1,
+      
+      // Personal details (required)
+      dateOfBirth,
+      gender,
+      category,
+      bloodGroup,
+      religion,
+      nationality = 'Indian',
+      
+      // Contact details
+      personalEmail,
+      personalPhone,
+      
+      // Address details
+      permanentAddressStreet,
+      permanentAddressCity,
+      permanentAddressState,
+      permanentAddressPincode,
+      permanentAddressCountry = 'India',
+      currentAddressStreet,
+      currentAddressCity,
+      currentAddressState,
+      currentAddressPincode,
+      currentAddressCountry = 'India',
+      
+      // Guardian details (required)
+      guardianName,
+      guardianRelation,
+      guardianPhone,
+      guardianEmail,
+      guardianOccupation,
+      
+      // Academic performance
+      cgpa,
+      
+      // Status
+      admissionStatus = 'enrolled',
+      isActive = true,
+      
+      // Department and College IDs
+      departmentId,
       department,
-      contactNumber,
-      address,
-      college
+      collegeId,
+      college,
+      sectionId
     } = req.body;
 
     // Use college from request or default to admin's college
-    const userCollege = college || req.user.college;
+    const finalCollegeId = collegeId || college || req.user.collegeId;
+    
+    // Handle department - can be provided as ID or name
+    let finalDepartmentId = departmentId || department;
+    
+    // Handle department - can be provided as ID or name
+    // First try to find by ID, if that fails, try by name
+    if (finalDepartmentId && typeof finalDepartmentId === 'string') {
+      // First attempt: try as ID
+      let departmentRecord = await Department.findByPk(finalDepartmentId);
+      
+      // If not found by ID, try as name
+      if (!departmentRecord) {
+        departmentRecord = await Department.findOne({
+          where: {
+            name: finalDepartmentId,
+            collegeId: finalCollegeId
+          }
+        });
+        
+        if (departmentRecord) {
+          finalDepartmentId = departmentRecord.id;
+        } else {
+          return next(new ErrorResponse(`Department '${finalDepartmentId}' not found in college`, 404));
+        }
+      } else {
+        // Verify department belongs to the college
+        if (departmentRecord.collegeId.toString() !== finalCollegeId.toString()) {
+          return next(new ErrorResponse(`Department does not belong to the specified college`, 400));
+        }
+      }
+    }
 
     // Create user first
     const user = await User.create({
@@ -309,49 +416,112 @@ exports.createStudent = async (req, res, next) => {
       email,
       password,
       role: 'student',
-      college: userCollege,
-      department,
-      contactNumber,
-      address
+      collegeId: finalCollegeId,
+      departmentId: finalDepartmentId,
+      phone: contactNumber,
+      addressStreet,
+      addressCity,
+      addressState,
+      addressPincode,
+      addressCountry
     });
 
-    // Create student
+    // Create student with all required fields
     const student = await Student.create({
-      user: user._id,
+      userId: user.id,
+      collegeId: finalCollegeId,
+      departmentId: finalDepartmentId,
+      sectionId,
+      
+      // Student identification
+      rollNumber,
       enrollmentNumber,
+      studentId,
+      
+      // Academic details
       batch,
       program,
+      admissionYear,
       currentSemester,
-      department
+      
+      // Personal details
+      dateOfBirth,
+      gender,
+      bloodGroup,
+      category,
+      religion,
+      nationality,
+      
+      // Contact details
+      personalEmail,
+      personalPhone,
+      
+      // Address
+      permanentAddressStreet,
+      permanentAddressCity,
+      permanentAddressState,
+      permanentAddressPincode,
+      permanentAddressCountry,
+      currentAddressStreet,
+      currentAddressCity,
+      currentAddressState,
+      currentAddressPincode,
+      currentAddressCountry,
+      
+      // Guardian details
+      guardianName,
+      guardianRelation,
+      guardianPhone,
+      guardianEmail,
+      guardianOccupation,
+      
+      // Academic performance
+      cgpa,
+      
+      // Status
+      admissionStatus,
+      isActive
     });
 
     // Auto-assign courses based on department and semester
-    const coursesToAssign = await Course.find({
-      department: department,
-      semester: currentSemester
+    const coursesToAssign = await Course.findAll({
+      where: {
+        departmentId: finalDepartmentId,
+        semester: currentSemester
+      }
     });
 
     if (coursesToAssign.length > 0) {
-      // Add courses to student
-      student.courses = coursesToAssign.map(course => course._id);
-      await student.save();
-
-      // Add student to each course
-      await Promise.all(coursesToAssign.map(async (course) => {
-        course.students.push(student._id);
-        await course.save();
-      }));
+      // Add student to each course through many-to-many relationship
+      await student.addCourses(coursesToAssign);
     }
 
-    // Populate the response
-    const populatedStudent = await Student.findById(student._id)
-      .populate('user', 'name email contactNumber department')
-      .populate('courses', 'code name credits semester');
+    // Get the populated student response
+    const populatedStudent = await Student.findByPk(student.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['name', 'shortName']
+        },
+        {
+          model: Course,
+          as: 'courses',
+          attributes: ['code', 'name', 'credits', 'semester'],
+          through: { attributes: [] }
+        }
+      ]
+    });
 
     res.status(201).json({
       success: true,
       data: populatedStudent,
-      message: `Student created and automatically assigned to ${coursesToAssign.length} courses for ${department} department, semester ${currentSemester}`
+      message: `Student created and automatically assigned to ${coursesToAssign.length} courses for ${finalDepartmentId} department, semester ${currentSemester}`
     });
   } catch (error) {
     next(error);
@@ -365,7 +535,7 @@ exports.addStudentToDepartment = async (req, res, next) => {
   try {
     const { department, currentSemester } = req.body;
     
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findByPk(req.params.id);
     
     if (!student) {
       return next(
@@ -380,15 +550,17 @@ exports.addStudentToDepartment = async (req, res, next) => {
     }
 
     // Find courses for the new department and semester
-    const coursesToAssign = await Course.find({
-      department: department,
-      semester: currentSemester || student.currentSemester
+    const coursesToAssign = await Course.findAll({
+      where: {
+        departmentId: department,
+        semester: currentSemester || student.currentSemester
+      }
     });
 
     // Remove student from previous courses
     if (student.courses.length > 0) {
       await Promise.all(student.courses.map(async (courseId) => {
-        const course = await Course.findById(courseId);
+        const course = await Course.findByPk(courseId);
         if (course) {
           course.students = course.students.filter(
             studentId => studentId.toString() !== student._id.toString()
@@ -411,16 +583,27 @@ exports.addStudentToDepartment = async (req, res, next) => {
     }));
 
     // Update user's department too
-    const user = await User.findById(student.user);
+    const user = await User.findByPk(student.userId);
     if (user) {
-      user.department = department;
-      await user.save();
+      await user.update({ departmentId: department });
     }
 
     // Populate the response
-    const populatedStudent = await Student.findById(student._id)
-      .populate('user', 'name email contactNumber department')
-      .populate('courses', 'code name credits semester');
+    const populatedStudent = await Student.findByPk(student.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Course,
+          as: 'courses',
+          attributes: ['code', 'name', 'credits', 'semester'],
+          through: { attributes: [] }
+        }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -437,7 +620,9 @@ exports.addStudentToDepartment = async (req, res, next) => {
 // @access  Private/Student only or Admin
 exports.uploadProfilePicture = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id).populate('user');
+    const student = await Student.findByPk(req.params.id, {
+      include: [{ model: User }]
+    });
     
     if (!student) {
       return next(
@@ -446,7 +631,7 @@ exports.uploadProfilePicture = async (req, res, next) => {
     }
 
     // Check authorization - only the student themselves or admin can upload
-    if (student.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (student.user.id.toString() !== req.user.id && req.user.role !== 'admin') {
       return next(
         new ErrorResponse(`Not authorized to upload profile picture for this student`, 403)
       );
@@ -460,9 +645,10 @@ exports.uploadProfilePicture = async (req, res, next) => {
     }
 
     // Update user's profile picture
-    await User.findByIdAndUpdate(student.user._id, {
-      profilePicture: req.file.path
-    });
+    await User.update(
+      { profilePicture: req.file.path },
+      { where: { id: student.user.id } }
+    );
 
     res.status(200).json({
       success: true,
@@ -487,9 +673,19 @@ exports.uploadProfilePicture = async (req, res, next) => {
 // @access  Private/Student only
 exports.getStudentDashboard = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id)
-      .populate('user', 'name email profilePicture department')
-      .populate('courses', 'code name credits instructor');
+    const student = await Student.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          attributes: ['name', 'email', 'profilePicture']
+        },
+        {
+          model: Course,
+          attributes: ['code', 'name', 'credits'],
+          through: { attributes: [] }
+        }
+      ]
+    });
     
     if (!student) {
       return next(
@@ -498,40 +694,35 @@ exports.getStudentDashboard = async (req, res, next) => {
     }
 
     // Check authorization - only the student themselves can access their dashboard
-    if (student.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (student.user.id.toString() !== req.user.id && req.user.role !== 'admin') {
       return next(
         new ErrorResponse(`Not authorized to access this student's dashboard`, 403)
       );
     }
 
-    // Get recent assignments (pending and submitted)
-    const recentAssignments = student.assignments
-      .sort((a, b) => new Date(b.assignedDate) - new Date(a.assignedDate))
-      .slice(0, 5);
+    // Get recent assignments (placeholder - would need assignment model)
+    const recentAssignments = [];
 
-    // Calculate statistics
-    const totalAssignments = student.assignments.length;
-    const submittedAssignments = student.assignments.filter(a => a.status === 'submitted').length;
-    const pendingAssignments = student.assignments.filter(a => a.status === 'pending').length;
-    const gradedAssignments = student.assignments.filter(a => a.grade !== undefined).length;
-
-    // Calculate average grade
-    const gradedAssignmentsWithGrades = student.assignments.filter(a => a.grade !== undefined);
-    const averageGrade = gradedAssignmentsWithGrades.length > 0 
-      ? gradedAssignmentsWithGrades.reduce((sum, a) => sum + a.grade, 0) / gradedAssignmentsWithGrades.length 
-      : 0;
+    // Calculate statistics (placeholder)
+    const totalAssignments = 0;
+    const submittedAssignments = 0;
+    const pendingAssignments = 0;
+    const gradedAssignments = 0;
+    const averageGrade = 0;
 
     const dashboardData = {
       studentInfo: {
-        id: student._id,
+        id: student.id,
         name: student.user.name,
         email: student.user.email,
         profilePicture: student.user.profilePicture,
-        department: student.user.department,
-        enrollmentDate: student.enrollmentDate,
-        studentId: student.studentId
+        enrollmentNumber: student.enrollmentNumber,
+        studentId: student.studentId,
+        batch: student.batch,
+        program: student.program,
+        currentSemester: student.currentSemester
       },
-      courses: student.courses,
+      courses: student.courses || [],
       assignments: {
         recent: recentAssignments,
         statistics: {
@@ -544,8 +735,8 @@ exports.getStudentDashboard = async (req, res, next) => {
       },
       attendance: {
         // This could be expanded with actual attendance data
-        totalClasses: student.attendance ? student.attendance.length : 0,
-        attendedClasses: student.attendance ? student.attendance.filter(a => a.status === 'present').length : 0
+        totalClasses: 0,
+        attendedClasses: 0
       }
     };
 

@@ -1,4 +1,5 @@
-const { Faculty, Student, Course, User } = require('../models');
+const { Faculty, Student, Course, User, Department } = require('../models');
+const { Op } = require('sequelize');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 
@@ -7,7 +8,15 @@ const LoggingService = require('../services/LoggingService');
 // @access  Private/Admin
 exports.getAllFaculty = async (req, res, next) => {
   try {
-    const faculty = await Faculty.find().populate('user', 'name email department');
+    const faculty = await Faculty.findAll({
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email']
+        }
+      ]
+    });
     
     res.status(200).json({
       success: true,
@@ -24,9 +33,19 @@ exports.getAllFaculty = async (req, res, next) => {
 // @access  Private
 exports.getFaculty = async (req, res, next) => {
   try {
-    const faculty = await Faculty.findById(req.params.id)
-      .populate('user', 'name email contactNumber department')
-      .populate('courses', 'code name credits');
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Course,
+          attributes: ['code', 'name', 'credits']
+        }
+      ]
+    });
     
     if (!faculty) {
       return next(
@@ -48,7 +67,7 @@ exports.getFaculty = async (req, res, next) => {
 // @access  Private
 exports.getFacultyCourses = async (req, res, next) => {
   try {
-    const faculty = await Faculty.findById(req.params.id);
+    const faculty = await Faculty.findByPk(req.params.id);
     
     if (!faculty) {
       return next(
@@ -56,7 +75,11 @@ exports.getFacultyCourses = async (req, res, next) => {
       );
     }
 
-    const courses = await Course.find({ _id: { $in: faculty.courses } });
+    const courses = await Course.findAll({
+      where: {
+        facultyId: faculty.id
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -76,7 +99,7 @@ exports.markAttendance = async (req, res, next) => {
     const { studentId, date, present } = req.body;
     
     // Check if faculty exists and is assigned to the course
-    const faculty = await Faculty.findById(req.params.id);
+    const faculty = await Faculty.findByPk(req.params.id);
     
     if (!faculty) {
       return next(
@@ -85,14 +108,14 @@ exports.markAttendance = async (req, res, next) => {
     }
 
     // Only the faculty themselves or admin can mark attendance
-    if (faculty.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (faculty.userId.toString() !== req.user.id && req.user.role !== 'admin') {
       return next(
         new ErrorResponse(`Not authorized to mark attendance`, 403)
       );
     }
 
     // Check if course exists
-    const course = await Course.findById(req.params.courseId);
+    const course = await Course.findByPk(req.params.courseId);
     
     if (!course) {
       return next(
@@ -108,7 +131,7 @@ exports.markAttendance = async (req, res, next) => {
     }
 
     // Check if student exists and is enrolled in the course
-    const student = await Student.findById(studentId);
+    const student = await Student.findByPk(studentId);
     
     if (!student) {
       return next(
@@ -150,7 +173,9 @@ exports.gradeAssignment = async (req, res, next) => {
     const { score, feedback } = req.body;
     
     // Check if faculty exists
-    const faculty = await Faculty.findById(req.params.id);
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [{ model: User }]
+    });
     
     if (!faculty) {
       return next(
@@ -159,14 +184,14 @@ exports.gradeAssignment = async (req, res, next) => {
     }
 
     // Only the faculty themselves can grade assignments
-    if (faculty.user.toString() !== req.user.id) {
+    if (faculty.user.id.toString() !== req.user.id) {
       return next(
         new ErrorResponse(`Not authorized to grade assignments`, 403)
       );
     }
 
     // Check if student exists
-    const student = await Student.findById(req.params.studentId);
+    const student = await Student.findByPk(req.params.studentId);
     
     if (!student) {
       return next(
@@ -221,7 +246,9 @@ exports.createAssignment = async (req, res, next) => {
     const { title, description, dueDate, totalMarks } = req.body;
     
     // Check if faculty exists
-    const faculty = await Faculty.findById(req.params.id);
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [{ model: User }]
+    });
     
     if (!faculty) {
       return next(
@@ -230,14 +257,14 @@ exports.createAssignment = async (req, res, next) => {
     }
 
     // Only the faculty themselves can create assignments
-    if (faculty.user.toString() !== req.user.id) {
+    if (faculty.user.id.toString() !== req.user.id) {
       return next(
         new ErrorResponse(`Not authorized to create assignments`, 403)
       );
     }
 
     // Check if course exists
-    const course = await Course.findById(req.params.courseId);
+    const course = await Course.findByPk(req.params.courseId);
     
     if (!course) {
       return next(
@@ -263,8 +290,14 @@ exports.createAssignment = async (req, res, next) => {
     course.assignments.push(assignment);
     await course.save();
 
-    // Add assignment to each student enrolled in the course
-    const students = await Student.find({ courses: req.params.courseId });
+    // Add assignment to each student enrolled in the course  
+    const students = await Student.findAll({
+      include: [{
+        model: Course,
+        where: { id: req.params.courseId },
+        through: { attributes: [] }
+      }]
+    });
     
     const studentAssignment = {
       title,
@@ -293,7 +326,9 @@ exports.createAssignment = async (req, res, next) => {
 // @access  Private/Faculty only or Admin
 exports.uploadProfilePicture = async (req, res, next) => {
   try {
-    const faculty = await Faculty.findById(req.params.id).populate('user');
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [{ model: User }]
+    });
     
     if (!faculty) {
       return next(
@@ -302,7 +337,7 @@ exports.uploadProfilePicture = async (req, res, next) => {
     }
 
     // Check authorization - only the faculty themselves or admin can upload
-    if (faculty.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (faculty.User.id.toString() !== req.user.id && req.user.role !== 'admin') {
       return next(
         new ErrorResponse(`Not authorized to upload profile picture for this faculty`, 403)
       );
@@ -316,9 +351,10 @@ exports.uploadProfilePicture = async (req, res, next) => {
     }
 
     // Update user's profile picture
-    await User.findByIdAndUpdate(faculty.user._id, {
-      profilePicture: req.file.path
-    });
+    await User.update(
+      { profilePicture: req.file.path },
+      { where: { id: faculty.user.id } }
+    );
 
     res.status(200).json({
       success: true,
@@ -343,20 +379,26 @@ exports.uploadProfilePicture = async (req, res, next) => {
 // @access  Private/Faculty only
 exports.getFacultyDashboard = async (req, res, next) => {
   try {
-    const faculty = await Faculty.findById(req.params.id)
-      .populate('user', 'name email profilePicture department')
-      .populate({
-        path: 'courses',
-        select: 'code name credits students',
-        populate: {
-          path: 'students',
-          select: 'user',
-          populate: {
-            path: 'user',
-            select: 'name'
-          }
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          attributes: ['name', 'email', 'profilePicture']
+        },
+        {
+          model: Course,
+          attributes: ['code', 'name', 'credits'],
+          include: [{
+            model: Student,
+            attributes: ['id'],
+            include: [{
+              model: User,
+              attributes: ['name']
+            }]
+          }]
         }
-      });
+      ]
+    });
     
     if (!faculty) {
       return next(
@@ -365,40 +407,38 @@ exports.getFacultyDashboard = async (req, res, next) => {
     }
 
     // Check authorization - only the faculty themselves can access their dashboard
-    if (faculty.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (faculty.User.id.toString() !== req.user.id && req.user.role !== 'admin') {
       return next(
         new ErrorResponse(`Not authorized to access this faculty's dashboard`, 403)
       );
     }
 
     // Calculate statistics
-    const totalCourses = faculty.courses.length;
-    const totalStudents = faculty.courses.reduce((total, course) => total + (course.students ? course.students.length : 0), 0);
+    const totalCourses = faculty.courses ? faculty.courses.length : 0;
+    const totalStudents = faculty.courses 
+      ? faculty.courses.reduce((total, course) => total + (course.students ? course.students.length : 0), 0) 
+      : 0;
 
-    // Get recent assignments created by this faculty
-    const recentAssignments = faculty.assignments 
-      ? faculty.assignments
-          .sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate))
-          .slice(0, 5)
-      : [];
+    // Get recent assignments created by this faculty (placeholder - would need assignment model)
+    const recentAssignments = [];
 
     const dashboardData = {
       facultyInfo: {
-        id: faculty._id,
+        id: faculty.id,
         name: faculty.user.name,
         email: faculty.user.email,
         profilePicture: faculty.user.profilePicture,
-        department: faculty.user.department,
+        employeeId: faculty.employeeId,
         facultyId: faculty.facultyId,
         designation: faculty.designation
       },
-      courses: faculty.courses.map(course => ({
-        id: course._id,
+      courses: faculty.courses ? faculty.courses.map(course => ({
+        id: course.id,
         code: course.code,
         name: course.name,
         credits: course.credits,
         studentCount: course.students ? course.students.length : 0
-      })),
+      })) : [],
       statistics: {
         totalCourses,
         totalStudents,
@@ -425,19 +465,72 @@ exports.createFaculty = async (req, res, next) => {
       name,
       email,
       password,
+      contactNumber,
+      addressStreet,
+      addressCity,
+      addressState,
+      addressPincode,
+      addressCountry = 'India',
+      // Faculty-specific required fields
+      employeeId,
       facultyId,
       designation,
-      department,
-      contactNumber,
-      address,
       qualification,
-      experience,
       specialization,
+      experience,
+      joiningDate,
+      employmentType,
+      dateOfBirth,
+      gender,
+      // Optional fields
+      salary,
+      bloodGroup,
+      maritalStatus,
+      personalEmail,
+      personalPhone,
+      emergencyContact,
+      isHOD = false,
+      isActive = true,
+      // Department and College IDs
+      departmentId,
+      department,
+      collegeId,
       college
     } = req.body;
 
     // Use college from request or default to admin's college
-    const userCollege = college || req.user.college;
+    const finalCollegeId = collegeId || college || req.user.collegeId;
+    
+    // Handle department - can be provided as ID or name
+    let finalDepartmentId = departmentId || department;
+    
+    // Handle department - can be provided as ID or name
+    // First try to find by ID, if that fails, try by name
+    if (finalDepartmentId && typeof finalDepartmentId === 'string') {
+      // First attempt: try as ID
+      let departmentRecord = await Department.findByPk(finalDepartmentId);
+      
+      // If not found by ID, try as name
+      if (!departmentRecord) {
+        departmentRecord = await Department.findOne({
+          where: {
+            name: finalDepartmentId,
+            collegeId: finalCollegeId
+          }
+        });
+        
+        if (departmentRecord) {
+          finalDepartmentId = departmentRecord.id;
+        } else {
+          return next(new ErrorResponse(`Department '${finalDepartmentId}' not found in college`, 404));
+        }
+      } else {
+        // Verify department belongs to the college
+        if (departmentRecord.collegeId.toString() !== finalCollegeId.toString()) {
+          return next(new ErrorResponse(`Department does not belong to the specified college`, 400));
+        }
+      }
+    }
 
     // Create user first
     const user = await User.create({
@@ -445,26 +538,61 @@ exports.createFaculty = async (req, res, next) => {
       email,
       password,
       role: 'faculty',
-      college: userCollege,
-      department,
-      contactNumber,
-      address
+      collegeId: finalCollegeId,
+      departmentId: finalDepartmentId,
+      phone: contactNumber,
+      addressStreet,
+      addressCity,
+      addressState,
+      addressPincode,
+      addressCountry
     });
 
-    // Create faculty
+    // Create faculty with all required fields
     const faculty = await Faculty.create({
-      user: user._id,
+      userId: user.id,
+      collegeId: finalCollegeId,
+      departmentId: finalDepartmentId,
+      employeeId,
       facultyId,
       designation,
       qualification,
-      experience,
       specialization,
-      department
+      experience,
+      joiningDate,
+      employmentType,
+      dateOfBirth,
+      gender,
+      salary,
+      bloodGroup,
+      maritalStatus,
+      personalEmail,
+      personalPhone,
+      emergencyContact,
+      addressStreet,
+      addressCity,
+      addressState,
+      addressPincode,
+      addressCountry,
+      isHOD,
+      isActive
     });
 
-    // Populate the response
-    const populatedFaculty = await Faculty.findById(faculty._id)
-      .populate('user', 'name email contactNumber department');
+    // Get the populated faculty response
+    const populatedFaculty = await Faculty.findByPk(faculty.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['name', 'shortName']
+        }
+      ]
+    });
 
     res.status(201).json({
       success: true,

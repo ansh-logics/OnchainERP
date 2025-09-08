@@ -34,6 +34,17 @@ exports.protect = async (req, res, next) => {
       ]
     });
 
+    // If user is admin, also get the college they administer
+    if (req.user && req.user.role === 'admin') {
+      const { College } = require('../models');
+      const adminCollege = await College.findOne({
+        where: { adminId: req.user.id }
+      });
+      if (adminCollege) {
+        req.user.college = adminCollege;
+      }
+    }
+
     if (!req.user) {
       return next(new ErrorResponse('User not found', 404));
     }

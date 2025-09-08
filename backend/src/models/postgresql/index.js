@@ -53,6 +53,10 @@ Faculty.hasMany(Section, { foreignKey: 'classTeacherId', as: 'sections' });
 Course.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 Course.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
 
+// Many-to-many associations
+Student.belongsToMany(Course, { through: 'StudentCourses', as: 'courses' });
+Course.belongsToMany(Student, { through: 'StudentCourses', as: 'students' });
+
 // Section associations
 Section.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 Section.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });

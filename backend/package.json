@@ -10,7 +10,6 @@
     "lint": "eslint .",
     "seed:import": "node src/utils/seeder.js -i",
     "seed:delete": "node src/utils/seeder.js -d",
-    "migrate": "node src/utils/migration.js",
     "db:setup": "node -e \"require('./src/config/database').connectDatabases()\"",
     "db:reset": "node -e \"require('./src/models/postgresql').sequelize.sync({force: true})\""
   },

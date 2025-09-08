@@ -1,4 +1,5 @@
 const { Department, College, User, Course, Section } = require('../models');
+const { Op } = require('sequelize');
 // const Lab = require('../models/Lab'); // TODO: Update Lab model for PostgreSQL
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
@@ -18,27 +19,35 @@ const createDepartment = async (req, res, next) => {
       hod,
       programs,
       sectionsConfig,
-      rollNumberConfig
+      rollNumberConfig,
+      studentsPerSection,
+      totalSections,
+      totalIntake,
+      currentStrength
     } = req.body;
 
     // Check if user has permission to create department in this college
-    // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
+    // For admin users, req.user.college contains the full college object
+    const userCollegeId = req.user.college?.id || req.user.collegeId;
     
-    if (req.user.role !== 'super_admin' && userCollegeId.toString() !== college) {
+    if (req.user.role !== 'super_admin' && userCollegeId !== college) {
       return next(new ErrorResponse('Not authorized to create department in this college', 403));
     }
 
     // Check if department with same code exists globally (since code is unique)
-    const existingDepartmentByCode = await Department.findOne({ code: code.toUpperCase() });
+    const existingDepartmentByCode = await Department.findOne({ 
+      where: { code: code.toUpperCase() }
+    });
     if (existingDepartmentByCode) {
       return next(new ErrorResponse('Department with this code already exists', 400));
     }
 
     // Check if department with same shortName exists in the college
     const existingDepartment = await Department.findOne({
-      shortName: shortName.toUpperCase(),
-      college
+      where: {
+        shortName: shortName.toUpperCase(),
+        collegeId: college
+      }
     });
 
     if (existingDepartment) {
@@ -50,8 +59,12 @@ const createDepartment = async (req, res, next) => {
       shortName: shortName.toUpperCase(),
       code: code.toUpperCase(),
       description,
-      college,
-      hod: hod || undefined, // Convert empty string to undefined
+      collegeId: college,
+      hodId: hod || null, // Convert empty string to null
+      studentsPerSection,
+      totalSections,
+      totalIntake,
+      currentStrength: currentStrength || 0,
       programs: programs || [],
       sectionsConfig,
       rollNumberConfig
@@ -81,14 +94,28 @@ const getDepartments = async (req, res, next) => {
     // If not super admin, only show departments from user's college
     if (req.user.role !== 'super_admin') {
       // Handle case where user.college might be an ObjectId or populated object
-      const userCollegeId = req.user.college?._id || req.user.college;
-      query.college = userCollegeId;
+      const userCollegeId = req.user.college?.id || req.user.college;
+      if (userCollegeId) {
+        query.collegeId = userCollegeId;
+      }
     }
 
-    const departments = await Department.find(query)
-      .populate('college', 'name shortName')
-      .populate('hod', 'name email')
-      .sort({ name: 1 });
+    const departments = await Department.findAll({
+      where: query,
+      include: [
+        {
+          model: College,
+          as: 'college',
+          attributes: ['name', 'shortName']
+        },
+        {
+          model: User,
+          as: 'hod',
+          attributes: ['name', 'email']
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
 
     res.status(200).json({
       success: true,
@@ -106,9 +133,20 @@ const getDepartments = async (req, res, next) => {
 // @access  Private
 const getDepartment = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id)
-      .populate('college', 'name shortName')
-      .populate('hod', 'name email contactNumber');
+    const department = await Department.findByPk(req.params.id, {
+      include: [
+        {
+          model: College,
+          as: 'college',
+          attributes: ['name', 'shortName']
+        },
+        {
+          model: User,
+          as: 'hod',
+          attributes: ['name', 'email', 'phone']
+        }
+      ]
+    });
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -117,12 +155,12 @@ const getDepartment = async (req, res, next) => {
     // Debug logging
     console.log('User role:', req.user.role);
     console.log('User college:', req.user.college);
-    console.log('Department college:', department.college);
+    console.log('Department college:', department.College);
     
     // Check if user has access to this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college._id;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to access this department', 403));
@@ -143,7 +181,7 @@ const getDepartment = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const updateDepartment = async (req, res, next) => {
   try {
-    let department = await Department.findById(req.params.id);
+    let department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -152,21 +190,34 @@ const updateDepartment = async (req, res, next) => {
     // Debug logging
     console.log('Update - User role:', req.user.role);
     console.log('Update - User college:', req.user.college);
-    console.log('Update - Department college:', department.college);
+    console.log('Update - Department college:', department.collegeId);
 
     // Check if user has permission to update this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to update this department', 403));
     }
 
-    department = await Department.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    }).populate('college', 'name shortName').populate('hod', 'name email');
+    await department.update(req.body);
+    
+    // Reload with associations
+    department = await Department.findByPk(req.params.id, {
+      include: [
+        {
+          model: College,
+          as: 'college',
+          attributes: ['name', 'shortName']
+        },
+        {
+          model: User,
+          as: 'hod',
+          attributes: ['name', 'email']
+        }
+      ]
+    });
 
     res.status(200).json({
       success: true,
@@ -183,7 +234,7 @@ const updateDepartment = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const deleteDepartment = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -192,28 +243,30 @@ const deleteDepartment = async (req, res, next) => {
     // Debug logging
     console.log('Delete - User role:', req.user.role);
     console.log('Delete - User college:', req.user.college);
-    console.log('Delete - Department college:', department.college);
+    console.log('Delete - Department college:', department.collegeId);
 
     // Check if user has permission to delete this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to delete this department', 403));
     }
 
     // Check if there are students in this department
-    const studentCount = await User.countDocuments({
-      department: department._id,
-      role: 'student'
+    const studentCount = await User.count({
+      where: {
+        departmentId: department.id,
+        role: 'student'
+      }
     });
 
     if (studentCount > 0) {
       return next(new ErrorResponse('Cannot delete department with existing students', 400));
     }
 
-    await department.deleteOne();
+    await department.destroy();
 
     res.status(200).json({
       success: true,
@@ -230,7 +283,7 @@ const deleteDepartment = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const addCourse = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -239,12 +292,12 @@ const addCourse = async (req, res, next) => {
     // Debug logging
     console.log('Add Course - User role:', req.user.role);
     console.log('Add Course - User college:', req.user.college);
-    console.log('Add Course - Department college:', department.college);
+    console.log('Add Course - Department college:', department.collegeId);
 
     // Check if user has permission to add course to this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to add courses to this department', 403));
@@ -252,8 +305,8 @@ const addCourse = async (req, res, next) => {
 
     const courseData = {
       ...req.body,
-      department: department._id,
-      college: department.college
+      departmentId: department.id,
+      collegeId: department.collegeId
     };
 
     const course = await Course.create(courseData);
@@ -273,7 +326,7 @@ const addCourse = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const addLab = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -282,12 +335,12 @@ const addLab = async (req, res, next) => {
     // Debug logging
     console.log('Add Lab - User role:', req.user.role);
     console.log('Add Lab - User college:', req.user.college);
-    console.log('Add Lab - Department college:', department.college);
+    console.log('Add Lab - Department college:', department.collegeId);
 
     // Check if user has permission to add lab to this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to add labs to this department', 403));
@@ -295,8 +348,8 @@ const addLab = async (req, res, next) => {
 
     const labData = {
       ...req.body,
-      department: department._id,
-      college: department.college
+      departmentId: department.id,
+      collegeId: department.collegeId
     };
 
     const lab = await Lab.create(labData);
@@ -316,7 +369,7 @@ const addLab = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const createSections = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -325,7 +378,7 @@ const createSections = async (req, res, next) => {
     // Debug logging
     console.log('Create Sections - User role:', req.user.role);
     console.log('Create Sections - User college:', req.user.college);
-    console.log('Create Sections - Department college:', department.college);
+    console.log('Create Sections - Department college:', department.collegeId);
 
     // Check if user has permission to create sections for this department
     // Handle case where user.college might be an ObjectId or populated object
@@ -365,7 +418,7 @@ const createSections = async (req, res, next) => {
 // @access  Private
 const getDepartmentStats = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -374,38 +427,48 @@ const getDepartmentStats = async (req, res, next) => {
     // Debug logging
     console.log('Get Stats - User role:', req.user.role);
     console.log('Get Stats - User college:', req.user.college);
-    console.log('Get Stats - Department college:', department.college);
+    console.log('Get Stats - Department college:', department.collegeId);
 
     // Check if user has access to this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to access this department statistics', 403));
     }
 
     // Get statistics
-    const totalStudents = await User.countDocuments({
-      department: department._id,
-      role: 'student'
+    const totalStudents = await User.count({
+      where: {
+        departmentId: department.id,
+        role: 'student'
+      }
     });
 
-    const totalFaculty = await User.countDocuments({
-      department: department._id,
-      role: 'faculty'
+    const totalFaculty = await User.count({
+      where: {
+        departmentId: department.id,
+        role: 'faculty'
+      }
     });
 
-    const totalCourses = await Course.countDocuments({
-      department: department._id
+    const totalCourses = await Course.count({
+      where: {
+        departmentId: department.id
+      }
     });
 
-    const totalLabs = await Lab.countDocuments({
-      department: department._id
+    const totalLabs = await Lab.count({
+      where: {
+        departmentId: department.id
+      }
     });
 
-    const totalSections = await Section.countDocuments({
-      department: department._id
+    const totalSections = await Section.count({
+      where: {
+        departmentId: department.id
+      }
     });
 
     const stats = {
@@ -433,7 +496,7 @@ const getDepartmentStats = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const assignRollNumbersToStudents = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -442,12 +505,12 @@ const assignRollNumbersToStudents = async (req, res, next) => {
     // Debug logging
     console.log('Assign Roll Numbers - User role:', req.user.role);
     console.log('Assign Roll Numbers - User college:', req.user.college);
-    console.log('Assign Roll Numbers - Department college:', department.college);
+    console.log('Assign Roll Numbers - Department college:', department.collegeId);
 
     // Check if user has permission to assign roll numbers for this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to assign roll numbers for this department', 403));
@@ -456,11 +519,14 @@ const assignRollNumbersToStudents = async (req, res, next) => {
     const { academicYear, batch } = req.body;
 
     // Get students without roll numbers in this department
-    const students = await User.find({
-      department: department._id,
-      role: 'student',
-      rollNumber: { $exists: false }
-    }).sort({ createdAt: 1 });
+    const students = await User.findAll({
+      where: {
+        departmentId: department.id,
+        role: 'student',
+        rollNumber: null
+      },
+      order: [['createdAt', 'ASC']]
+    });
 
     if (students.length === 0) {
       return next(new ErrorResponse('No students found without roll numbers', 400));
@@ -476,13 +542,8 @@ const assignRollNumbersToStudents = async (req, res, next) => {
         i + 1
       );
 
-      const updatedStudent = await User.findByIdAndUpdate(
-        students[i]._id,
-        { rollNumber },
-        { new: true }
-      );
-
-      updatedStudents.push(updatedStudent);
+      await students[i].update({ rollNumber });
+      updatedStudents.push(students[i]);
     }
 
     res.status(200).json({
@@ -501,7 +562,7 @@ const assignRollNumbersToStudents = async (req, res, next) => {
 // @access  Private (Admin, Super Admin)
 const resetRollNumbers = async (req, res, next) => {
   try {
-    const department = await Department.findById(req.params.id);
+    const department = await Department.findByPk(req.params.id);
 
     if (!department) {
       return next(new ErrorResponse('Department not found', 404));
@@ -510,31 +571,31 @@ const resetRollNumbers = async (req, res, next) => {
     // Debug logging
     console.log('Reset Roll Numbers - User role:', req.user.role);
     console.log('Reset Roll Numbers - User college:', req.user.college);
-    console.log('Reset Roll Numbers - Department college:', department.college);
+    console.log('Reset Roll Numbers - Department college:', department.collegeId);
 
     // Check if user has permission to reset roll numbers for this department
     // Handle case where user.college might be an ObjectId or populated object
-    const userCollegeId = req.user.college?._id || req.user.college;
-    const departmentCollegeId = department.college;
+    const userCollegeId = req.user.college?.id || req.user.college;
+    const departmentCollegeId = department.collegeId;
     
     if (req.user.role !== 'super_admin' && userCollegeId.toString() !== departmentCollegeId.toString()) {
       return next(new ErrorResponse('Not authorized to reset roll numbers for this department', 403));
     }
 
     // Reset roll numbers for all students in this department
-    const result = await User.updateMany(
+    const result = await User.update(
+      { rollNumber: null },
       {
-        department: department._id,
-        role: 'student'
-      },
-      {
-        $unset: { rollNumber: 1 }
+        where: {
+          departmentId: department.id,
+          role: 'student'
+        }
       }
     );
 
     res.status(200).json({
       success: true,
-      message: `Roll numbers reset for ${result.modifiedCount} students`
+      message: `Roll numbers reset for ${result[0]} students`
     });
   } catch (error) {
     console.error('Reset roll numbers error:', error);

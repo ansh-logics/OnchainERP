@@ -1,0 +1,819 @@
+// OnchainERP Database Schema
+// Generated from Sequelize and Mongoose models
+// This represents a hybrid PostgreSQL + MongoDB architecture
+
+// ============================================
+// POSTGRESQL TABLES (Relational Data)
+// ============================================
+
+Table users {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(50) [not null]
+  email varchar [not null, unique]
+  password varchar [not null]
+  role user_role [not null]
+  studentId varchar [unique]
+  facultyId varchar [unique]
+  phone varchar(15)
+  isActive boolean [default: true]
+  isEmailVerified boolean [default: false]
+  lastLogin timestamp
+  resetPasswordToken varchar
+  resetPasswordExpire timestamp
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    email
+    role
+    studentId
+    facultyId
+  }
+}
+
+Table colleges {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar(100) [not null]
+  shortName varchar(20) [not null, unique]
+  establishedYear integer [not null]
+  affiliatedUniversity varchar [not null]
+  collegeType college_type [not null]
+  registrationNumber varchar [not null, unique]
+  
+  // Address fields
+  addressStreet varchar [not null]
+  addressCity varchar [not null]
+  addressState varchar [not null]
+  addressPincode varchar(6) [not null]
+  addressCountry varchar [default: 'India']
+  
+  // Contact fields
+  phone varchar(10) [not null]
+  email varchar [not null]
+  website varchar
+  fax varchar
+  
+  // Infrastructure
+  campusArea decimal(10,2) [not null, note: 'Campus area in acres']
+  totalBuildings integer
+  totalClassrooms integer
+  totalLaboratories integer
+  
+  // Library details
+  libraryTotalBooks integer
+  libraryDigitalResources boolean [default: false]
+  libraryArea integer [note: 'Library area in sq ft']
+  
+  // Admin reference
+  adminId uuid [not null, ref: > users.id]
+  
+  // Accreditation
+  naacGrade naac_grade
+  naacValidUntil timestamp
+  nbaAccredited boolean [default: false]
+  nbaValidUntil timestamp
+  
+  // Academic year settings
+  academicStartMonth integer [default: 7]
+  academicEndMonth integer [default: 6]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    shortName
+    (addressCity, addressState)
+    collegeType
+    adminId
+  }
+}
+
+Table departments {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  name varchar [not null]
+  shortName varchar [not null]
+  code varchar [not null, unique]
+  description text [not null]
+  hodId uuid [ref: > users.id]
+  
+  // Section configuration
+  studentsPerSection integer [not null]
+  totalSections integer [not null]
+  
+  // Intake capacity
+  totalIntake integer [not null]
+  currentStrength integer [default: 0]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    code
+    hodId
+  }
+}
+
+Table courses {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  
+  code varchar [not null, unique]
+  name varchar [not null]
+  shortName varchar
+  description text [not null]
+  
+  // Academic details
+  credits integer [not null]
+  semester integer [not null]
+  courseType course_type [not null]
+  
+  // Course structure
+  theoryHours integer [default: 0]
+  labHours integer [default: 0]
+  tutorialHours integer [default: 0]
+  
+  // Prerequisites
+  prerequisites text [note: 'JSON array of prerequisite course IDs']
+  
+  // Assessment
+  hasInternalAssessment boolean [default: true]
+  hasFinalExam boolean [default: true]
+  internalMarks integer [default: 40]
+  finalMarks integer [default: 60]
+  passingMarks integer [default: 40]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    departmentId
+    code
+    semester
+    courseType
+  }
+}
+
+Table faculty {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  userId uuid [not null, unique, ref: > users.id]
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  
+  // Faculty identification
+  employeeId varchar [not null, unique]
+  facultyId varchar [unique]
+  
+  // Professional details
+  designation faculty_designation [not null]
+  qualification varchar [not null]
+  specialization varchar
+  experience integer [note: 'Experience in years']
+  
+  // Employment details
+  joiningDate date [not null]
+  employmentType employment_type [not null]
+  salary decimal(10,2)
+  
+  // Personal details
+  dateOfBirth date [not null]
+  gender gender_type [not null]
+  bloodGroup blood_group
+  maritalStatus marital_status
+  
+  // Contact details
+  personalEmail varchar
+  personalPhone varchar
+  emergencyContact varchar
+  
+  // Address
+  addressStreet varchar
+  addressCity varchar
+  addressState varchar
+  addressPincode varchar(6)
+  addressCountry varchar [default: 'India']
+  
+  // Administrative roles
+  isHOD boolean [default: false]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    userId
+    collegeId
+    departmentId
+    employeeId
+    facultyId
+    designation
+  }
+}
+
+Table students {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  userId uuid [not null, unique, ref: > users.id]
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  sectionId uuid [ref: > sections.id]
+  
+  // Student identification
+  rollNumber varchar [unique]
+  enrollmentNumber varchar [not null, unique]
+  studentId varchar [unique]
+  
+  // Academic details
+  batch varchar [not null]
+  program varchar [not null]
+  admissionYear integer [not null]
+  currentSemester integer [default: 1]
+  
+  // Personal details
+  dateOfBirth date [not null]
+  gender gender_type [not null]
+  bloodGroup blood_group
+  category student_category [not null]
+  religion varchar
+  nationality varchar [default: 'Indian']
+  
+  // Contact details
+  personalEmail varchar
+  personalPhone varchar
+  
+  // Permanent Address
+  permanentAddressStreet varchar
+  permanentAddressCity varchar
+  permanentAddressState varchar
+  permanentAddressPincode varchar(6)
+  permanentAddressCountry varchar [default: 'India']
+  
+  // Current Address
+  currentAddressStreet varchar
+  currentAddressCity varchar
+  currentAddressState varchar
+  currentAddressPincode varchar(6)
+  currentAddressCountry varchar [default: 'India']
+  
+  // Guardian details
+  guardianName varchar [not null]
+  guardianRelation guardian_relation [not null]
+  guardianPhone varchar [not null]
+  guardianEmail varchar
+  guardianOccupation varchar
+  
+  // Academic performance
+  cgpa decimal(3,2)
+  
+  admissionStatus admission_status [default: 'applied']
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    userId
+    collegeId
+    departmentId
+    sectionId
+    rollNumber
+    enrollmentNumber
+    batch
+    admissionStatus
+  }
+}
+
+Table sections {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  
+  name varchar [not null]
+  code varchar [not null, unique]
+  batch varchar [not null]
+  semester integer [not null]
+  
+  // Section configuration
+  maxCapacity integer [not null]
+  currentStrength integer [default: 0]
+  
+  // Class teacher
+  classTeacherId uuid [ref: > faculty.id]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    departmentId
+    code
+    batch
+    semester
+    classTeacherId
+  }
+}
+
+Table labs {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  name varchar [not null]
+  labCode varchar [not null, unique]
+  description text
+  location varchar
+  capacity integer
+  equipment json [default: '[]']
+  maintenance json [default: '[]']
+  availability json [default: '{}']
+  isActive boolean [default: true]
+  
+  // Foreign Keys
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  labInchargeId uuid [ref: > users.id]
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+  deletedAt timestamp [note: 'Soft delete']
+
+  indexes {
+    labCode [unique]
+    collegeId
+    departmentId
+    labInchargeId
+    isActive
+  }
+}
+
+Table transactions {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  
+  // Transaction type
+  type transaction_type [not null]
+  
+  // Category
+  category transaction_category [not null]
+  
+  // Amount in paisa for precision
+  amount bigint [not null]
+  
+  description varchar(500) [not null]
+  
+  // Student reference for fee payments
+  studentId uuid [ref: > students.id]
+  
+  // Payment details
+  paymentMethod payment_method [not null]
+  
+  status transaction_status [default: 'pending']
+  
+  dueDate timestamp
+  paidDate timestamp
+  
+  referenceNumber varchar [not null, unique]
+  
+  // Academic details
+  academicYear varchar
+  semester integer
+  
+  // Processing user
+  processedById uuid [ref: > users.id]
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    type
+    category
+    studentId
+    status
+    referenceNumber
+    paidDate
+    academicYear
+  }
+}
+
+// ============================================
+// MONGODB COLLECTIONS (Document Data)
+// ============================================
+
+// Note: MongoDB collections are represented here for documentation
+// but DBML doesn't natively support MongoDB schema definitions
+
+Table analytics [note: 'MongoDB Collection - Analytics and reporting data'] {
+  _id ObjectId [primary key]
+  collegeId varchar [note: 'UUID from PostgreSQL']
+  type analytics_type [not null]
+  period analytics_period [not null]
+  startDate timestamp [not null]
+  endDate timestamp [not null]
+  data json [not null, note: 'Flexible analytics data structure']
+  generatedBy varchar [not null, note: 'User UUID from PostgreSQL']
+  title varchar [not null]
+  description varchar
+  status analytics_status [default: 'completed']
+  processingTime integer [note: 'in milliseconds']
+  isPublic boolean [default: false]
+  sharedWith json [note: 'Array of user UUIDs']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
+Table configurations [note: 'MongoDB Collection - Flexible settings and configurations'] {
+  _id ObjectId [primary key]
+  scope config_scope [not null]
+  entityId varchar [note: 'UUID from PostgreSQL (college, department, or user)']
+  key varchar [not null]
+  value json [not null, note: 'Mixed data type value']
+  description varchar
+  dataType config_data_type [not null]
+  isRequired boolean [default: false]
+  defaultValue json [note: 'Mixed data type default value']
+  isPublic boolean [default: false]
+  canBeModified boolean [default: true]
+  version integer [default: 1]
+  createdBy varchar [not null, note: 'User UUID from PostgreSQL']
+  lastModifiedBy varchar [note: 'User UUID from PostgreSQL']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
+Table file_uploads [note: 'MongoDB Collection - File upload schema for documents, images, assignments, etc.'] {
+  _id ObjectId [primary key]
+  entityType file_entity_type [not null]
+  entityId varchar [not null, note: 'UUID from PostgreSQL']
+  originalName varchar [not null]
+  fileName varchar [not null, unique]
+  filePath varchar [not null]
+  fileSize integer [not null]
+  mimeType varchar [not null]
+  fileType file_type [not null]
+  category file_category [not null]
+  description varchar
+  tags json [note: 'Array of strings']
+  uploadedBy varchar [not null, note: 'User UUID from PostgreSQL']
+  uploadedAt timestamp [default: `now()`]
+  isPublic boolean [default: false]
+  allowedRoles json [note: 'Array of user roles']
+  isActive boolean [default: true]
+  version integer [default: 1]
+  parentFileId ObjectId [note: 'Reference to parent file for versioning']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
+Table notifications [note: 'MongoDB Collection - Notifications system'] {
+  _id ObjectId [primary key]
+  recipientId varchar [not null, note: 'User UUID from PostgreSQL']
+  recipientType notification_recipient_type [default: 'user']
+  senderId varchar [not null, note: 'User UUID from PostgreSQL']
+  collegeId varchar [note: 'UUID from PostgreSQL']
+  title varchar(200) [not null]
+  message varchar(1000) [not null]
+  type notification_type [not null]
+  priority notification_priority [default: 'normal']
+  status notification_status [default: 'sent']
+  channels json [note: 'Array of delivery channels']
+  readAt timestamp
+  actionUrl varchar
+  actionText varchar
+  expiresAt timestamp
+  metadata json [note: 'Flexible metadata structure']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
+Table system_logs [note: 'MongoDB Collection - System logs for audit trail, user actions, system events'] {
+  _id ObjectId [primary key]
+  level log_level [default: 'info']
+  event varchar [not null]
+  action varchar [not null]
+  userId varchar [note: 'UUID from PostgreSQL']
+  userRole user_role
+  collegeId varchar [note: 'UUID from PostgreSQL']
+  ip varchar
+  userAgent varchar
+  method varchar
+  url varchar
+  data json [note: 'Flexible data structure']
+  error json [note: 'Error details with message, stack, code']
+  duration integer [note: 'in milliseconds']
+  status log_status [default: 'success']
+  createdAt timestamp [default: `now()`, note: 'TTL index - auto-delete after 30 days']
+  updatedAt timestamp [default: `now()`]
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+Enum user_role {
+  student
+  faculty
+  admin
+  cashier
+  super_admin
+}
+
+Enum college_type {
+  Government
+  Private
+  Autonomous
+  Deemed
+}
+
+Enum naac_grade {
+  "A++"
+  "A+"
+  A
+  "B++"
+  "B+"
+  B
+  C
+  "Not Accredited"
+}
+
+Enum course_type {
+  Core
+  Elective
+  Laboratory
+  Project
+  Internship
+}
+
+Enum faculty_designation {
+  Professor
+  "Associate Professor"
+  "Assistant Professor"
+  Lecturer
+  "Senior Lecturer"
+  "Guest Faculty"
+  "Visiting Faculty"
+}
+
+Enum employment_type {
+  Permanent
+  Contract
+  "Part-time"
+  Guest
+}
+
+Enum gender_type {
+  Male
+  Female
+  Other
+}
+
+Enum blood_group {
+  "A+"
+  "A-"
+  "B+"
+  "B-"
+  "AB+"
+  "AB-"
+  "O+"
+  "O-"
+}
+
+Enum marital_status {
+  Single
+  Married
+  Divorced
+  Widowed
+}
+
+Enum student_category {
+  General
+  OBC
+  SC
+  ST
+  EWS
+}
+
+Enum guardian_relation {
+  Father
+  Mother
+  Guardian
+  Other
+}
+
+Enum admission_status {
+  applied
+  approved
+  enrolled
+  graduated
+  dropped
+  suspended
+}
+
+Enum transaction_type {
+  income
+  expense
+}
+
+Enum transaction_category {
+  // Income categories
+  tuition_fee
+  lab_fee
+  library_fee
+  examination_fee
+  admission_fee
+  hostel_fee
+  transport_fee
+  activity_fee
+  late_fee
+  fine
+  other_income
+  
+  // Expense categories
+  salary
+  utilities
+  maintenance
+  equipment
+  supplies
+  rent
+  insurance
+  marketing
+  travel
+  professional_fees
+  software_licenses
+  training
+  other_expense
+}
+
+Enum payment_method {
+  cash
+  card
+  bank_transfer
+  upi
+  cheque
+  dd
+  online
+}
+
+Enum transaction_status {
+  paid
+  pending
+  overdue
+  cancelled
+  refunded
+}
+
+// MongoDB Enums (for documentation)
+Enum analytics_type {
+  user_activity
+  enrollment_stats
+  financial_stats
+  academic_performance
+  system_usage
+  custom_report
+}
+
+Enum analytics_period {
+  daily
+  weekly
+  monthly
+  quarterly
+  yearly
+  custom
+}
+
+Enum analytics_status {
+  generating
+  completed
+  failed
+}
+
+Enum config_scope {
+  global
+  college
+  department
+  user
+}
+
+Enum config_data_type {
+  string
+  number
+  boolean
+  object
+  array
+}
+
+Enum file_entity_type {
+  student
+  faculty
+  college
+  course
+  assignment
+  announcement
+}
+
+Enum file_type {
+  document
+  image
+  video
+  audio
+  archive
+  other
+}
+
+Enum file_category {
+  profile_photo
+  id_proof
+  address_proof
+  academic_certificate
+  assignment
+  notes
+  syllabus
+  timetable
+  announcement
+  college_logo
+  college_image
+  lab_image
+  other
+}
+
+Enum notification_recipient_type {
+  user
+  role
+  department
+  college
+  all
+}
+
+Enum notification_type {
+  announcement
+  assignment
+  fee_reminder
+  grade_update
+  attendance_alert
+  system_update
+  admission_update
+  event_reminder
+  deadline_alert
+  general
+}
+
+Enum notification_priority {
+  low
+  normal
+  high
+  urgent
+}
+
+Enum notification_status {
+  sent
+  delivered
+  read
+  failed
+}
+
+Enum log_level {
+  info
+  warn
+  error
+  debug
+}
+
+Enum log_status {
+  success
+  error
+  warning
+}
+
+// ============================================
+// RELATIONSHIPS SUMMARY
+// ============================================
+
+// PostgreSQL Relationships:
+// - colleges -> users (adminId)
+// - departments -> colleges (collegeId)
+// - departments -> users (hodId) [optional]
+// - courses -> colleges (collegeId)
+// - courses -> departments (departmentId)
+// - faculty -> users (userId)
+// - faculty -> colleges (collegeId)
+// - faculty -> departments (departmentId)
+// - students -> users (userId)
+// - students -> colleges (collegeId)
+// - students -> departments (departmentId)
+// - students -> sections (sectionId) [optional]
+// - sections -> colleges (collegeId)
+// - sections -> departments (departmentId)
+// - sections -> faculty (classTeacherId) [optional]
+// - labs -> colleges (collegeId)
+// - labs -> departments (departmentId)
+// - labs -> users (labInchargeId) [optional]
+// - transactions -> colleges (collegeId)
+// - transactions -> students (studentId) [optional]
+// - transactions -> users (processedById) [optional]
+
+// MongoDB Collections reference PostgreSQL UUIDs:
+// - All MongoDB collections use UUID strings to reference PostgreSQL entities
+// - This creates a loose coupling between the relational and document stores
+// - Referential integrity is maintained at the application level
