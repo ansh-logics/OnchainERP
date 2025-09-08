@@ -380,6 +380,129 @@ exports.updatePassword = async (req, res, next) => {
   }
 };
 
+// @desc    Forgot password
+// @route   POST /api/auth/forgot-password
+// @access  Public
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return next(new ErrorResponse('Please provide an email', 400));
+    }
+
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      return next(new ErrorResponse('User not found', 404));
+    }
+
+    // Get reset token
+    const resetToken = crypto.randomBytes(20).toString('hex');
+
+    // Hash token and set to resetPasswordToken field
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Set expire
+    const resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await user.update({
+      resetPasswordToken,
+      resetPasswordExpire,
+    });
+
+    // Create reset url
+    const resetUrl = `${req.protocol}://${req.get(
+      'host'
+    )}/api/auth/reset-password/${resetToken}`;
+
+    const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
+
+    try {
+      // Here you would send email - for now just log it
+      console.log('Reset Password Email:', message);
+
+      // Log the activity
+      await LoggingService.log('auth', 'forgot_password', {
+        email,
+        resetToken: resetPasswordToken
+      }, user.id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Email sent',
+        resetToken // Remove this in production
+      });
+    } catch (err) {
+      console.error(err);
+      user.resetPasswordToken = null;
+      user.resetPasswordExpire = null;
+
+      await user.save();
+
+      return next(new ErrorResponse('Email could not be sent', 500));
+    }
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+};
+
+// @desc    Reset password
+// @route   PUT /api/auth/reset-password/:resetToken
+// @access  Public
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      return next(new ErrorResponse('Please provide a password', 400));
+    }
+
+    // Get hashed token
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(req.params.resetToken)
+      .digest('hex');
+
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken,
+        resetPasswordExpire: {
+          [require('sequelize').Op.gt]: new Date()
+        }
+      }
+    });
+
+    if (!user) {
+      return next(new ErrorResponse('Invalid token', 400));
+    }
+
+    // Set new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    await user.update({
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpire: null,
+    });
+
+    // Log the activity
+    await LoggingService.log('auth', 'password_reset', {
+      email: user.email
+    }, user.id);
+
+    sendTokenResponse(user, 200, res);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+};
+
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
   // Create token

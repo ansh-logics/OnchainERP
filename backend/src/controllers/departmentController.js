@@ -1,10 +1,7 @@
-const Department = require('../models/Department');
-const College = require('../models/College');
-const User = require('../models/User');
-const Course = require('../models/Course');
-const Lab = require('../models/Lab');
-const Section = require('../models/Section');
+const { Department, College, User, Course, Section } = require('../models');
+// const Lab = require('../models/Lab'); // TODO: Update Lab model for PostgreSQL
 const ErrorResponse = require('../utils/errorResponse');
+const LoggingService = require('../services/LoggingService');
 const rollNumberGenerator = require('../utils/rollNumberGenerator');
 
 // @desc    Create a new department

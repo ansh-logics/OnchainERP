@@ -1,8 +1,6 @@
-const Course = require('../models/Course');
-const Faculty = require('../models/Faculty');
-const Student = require('../models/Student');
-const Department = require('../models/Department');
+const { Course, Faculty, Student, Department } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
+const LoggingService = require('../services/LoggingService');
 
 // @desc    Get all courses
 // @route   GET /api/courses

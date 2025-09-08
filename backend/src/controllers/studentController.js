@@ -1,7 +1,6 @@
-const Student = require('../models/Student');
-const User = require('../models/User');
-const Course = require('../models/Course');
+const { Student, User, Course } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
+const LoggingService = require('../services/LoggingService');
 const path = require('path');
 
 // @desc    Get all students

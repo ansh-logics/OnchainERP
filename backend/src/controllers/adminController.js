@@ -1,9 +1,6 @@
-const User = require('../models/User');
-const Student = require('../models/Student');
-const Faculty = require('../models/Faculty');
-const Course = require('../models/Course');
-const Department = require('../models/Department');
+const { User, Student, Faculty, Course, Department } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
+const LoggingService = require('../services/LoggingService');
 
 // @desc    Get system dashboard statistics
 // @route   GET /api/admin/dashboard

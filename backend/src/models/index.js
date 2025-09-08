@@ -13,6 +13,7 @@ const {
   Course,
   Section,
   Transaction,
+  Lab,
   sequelize
 } = PostgreSQLModels;
 
@@ -37,6 +38,7 @@ module.exports = {
   Course,
   Section,
   Transaction,
+  Lab,
   sequelize,
   
   // MongoDB Models

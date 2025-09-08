@@ -11,14 +11,14 @@ const {
 } = require('../models/postgresql');
 
 // MongoDB models (keep existing for migration)
-const MongoUser = require('../models/User');
-const MongoCollege = require('../models/College');
-const MongoDepartment = require('../models/Department');
-const MongoStudent = require('../models/Student');
-const MongoFaculty = require('../models/Faculty');
-const MongoCourse = require('../models/Course');
-const MongoSection = require('../models/Section');
-const MongoTransaction = require('../models/Transaction');
+const MongoUser = require('../models/mongodb_deprecated/User');
+const MongoCollege = require('../models/mongodb_deprecated/College');
+const MongoDepartment = require('../models/mongodb_deprecated/Department');
+const MongoStudent = require('../models/mongodb_deprecated/Student');
+const MongoFaculty = require('../models/mongodb_deprecated/Faculty');
+const MongoCourse = require('../models/mongodb_deprecated/Course');
+const MongoSection = require('../models/mongodb_deprecated/Section');
+const MongoTransaction = require('../models/mongodb_deprecated/Transaction');
 
 class MigrationService {
   static async migrateUsers() {

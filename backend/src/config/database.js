@@ -4,8 +4,8 @@ const mongoose = require('mongoose');
 // PostgreSQL Connection
 const sequelize = new Sequelize(
   process.env.POSTGRES_DB || 'onchain_erp',
-  process.env.POSTGRES_USER || 'postgres',
-  process.env.POSTGRES_PASSWORD || 'password',
+  process.env.POSTGRES_USER || 'anshbhatt',
+  process.env.POSTGRES_PASSWORD || '9013',
   {
     host: process.env.POSTGRES_HOST || 'localhost',
     port: process.env.POSTGRES_PORT || 5432,
@@ -23,7 +23,7 @@ const sequelize = new Sequelize(
 // MongoDB Connection
 const connectMongoDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+    const conn = await mongoose.connect("mongodb://localhost:27017/onchain-erp", {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });

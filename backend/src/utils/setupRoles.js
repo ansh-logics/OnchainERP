@@ -1,13 +1,17 @@
-const mongoose = require('mongoose');
-const Role = require('../models/Role');
-const Permission = require('../models/Permission');
+// TEMPORARILY DISABLED - Role management needs to be updated for PostgreSQL
+// const mongoose = require('mongoose');
+// const Role = require('../models/mongodb_deprecated/Role');
+// const Permission = require('../models/mongodb_deprecated/Permission');
 
 /**
  * Initialize default roles and permissions
+ * TODO: Update for PostgreSQL-based role management
  */
 const initializeRolesAndPermissions = async () => {
   try {
-    console.log('Initializing roles and permissions...');
+    console.log('Role initialization temporarily disabled during migration...');
+    // TODO: Implement PostgreSQL-based role management
+    return;
     
     // Define permissions
     const permissionsToCreate = [

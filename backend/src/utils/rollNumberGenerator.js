@@ -1,5 +1,4 @@
-const Department = require('../models/Department');
-const Student = require('../models/Student');
+const { Department, Student } = require('../models');
 
 /**
  * Generate roll number for a student based on department configuration
@@ -9,7 +8,7 @@ const Student = require('../models/Student');
  */
 const generateRollNumber = async (departmentId, admissionYear) => {
   try {
-    const department = await Department.findById(departmentId);
+    const department = await Department.findByPk(departmentId);
     
     if (!department) {
       throw new Error('Department not found');
@@ -38,8 +37,11 @@ const generateRollNumber = async (departmentId, admissionYear) => {
     }
     
     // Increment the current number for next student
-    department.rollNumberConfig.currentNumber = currentNumber + 1;
-    await department.save();
+    const updatedRollNumberConfig = {
+      ...department.rollNumberConfig,
+      currentNumber: currentNumber + 1
+    };
+    await department.update({ rollNumberConfig: updatedRollNumberConfig });
     
     return rollNumber;
   } catch (error) {
@@ -54,17 +56,26 @@ const generateRollNumber = async (departmentId, admissionYear) => {
  */
 const assignRollNumbers = async (departmentId) => {
   try {
-    const department = await Department.findById(departmentId);
+    const department = await Department.findByPk(departmentId);
     
     if (!department) {
       throw new Error('Department not found');
     }
 
     // Get all students in this department without roll numbers
-    const studentsWithoutRollNumbers = await Student.find({
-      department: departmentId,
-      rollNumber: { $exists: false }
-    }).populate('user', 'name email');
+    const studentsWithoutRollNumbers = await Student.findAll({
+      where: {
+        departmentId: departmentId,
+        rollNumber: null
+      },
+      include: [
+        {
+          model: require('../models').User,
+          as: 'user',
+          attributes: ['name', 'email']
+        }
+      ]
+    });
 
     const results = {
       assigned: 0,
@@ -80,28 +91,26 @@ const assignRollNumbers = async (departmentId) => {
         const rollNumber = await generateRollNumber(departmentId, admissionYear);
         
         // Update student with roll number
-        student.rollNumber = rollNumber;
-        await student.save();
+        await student.update({ rollNumber });
         
         results.assigned++;
         results.students.push({
-          studentId: student._id,
+          studentId: student.id,
           name: student.user.name,
           email: student.user.email,
           rollNumber: rollNumber
         });
       } catch (error) {
         results.errors.push({
-          studentId: student._id,
-          name: student.user.name,
+          studentId: student.id,
+          name: student.user?.name || 'Unknown',
           error: error.message
         });
       }
     }
 
     // Mark roll numbers as assigned for this department
-    department.rollNumbersAssigned = true;
-    await department.save();
+    await department.update({ rollNumbersAssigned: true });
 
     return results;
   } catch (error) {
@@ -117,7 +126,7 @@ const assignRollNumbers = async (departmentId) => {
  */
 const resetRollNumberSequence = async (departmentId, newStartNumber = null) => {
   try {
-    const department = await Department.findById(departmentId);
+    const department = await Department.findByPk(departmentId);
     
     if (!department) {
       throw new Error('Department not found');
@@ -125,10 +134,15 @@ const resetRollNumberSequence = async (departmentId, newStartNumber = null) => {
 
     // Reset to starting number or use provided number
     const resetNumber = newStartNumber || department.rollNumberConfig.startingNumber;
-    department.rollNumberConfig.currentNumber = resetNumber;
-    department.rollNumbersAssigned = false;
+    const updatedRollNumberConfig = {
+      ...department.rollNumberConfig,
+      currentNumber: resetNumber
+    };
     
-    await department.save();
+    await department.update({ 
+      rollNumberConfig: updatedRollNumberConfig,
+      rollNumbersAssigned: false 
+    });
     
     return department;
   } catch (error) {

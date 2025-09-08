@@ -1,8 +1,7 @@
-const Transaction = require('../models/Transaction');
-const Student = require('../models/Student');
-const User = require('../models/User');
+const { Transaction, Student, User } = require('../models');
 const asyncHandler = require('express-async-handler');
 const ErrorResponse = require('../utils/errorResponse');
+const LoggingService = require('../services/LoggingService');
 
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions

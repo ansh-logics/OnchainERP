@@ -9,12 +9,14 @@ const Faculty = require('./Faculty');
 const Course = require('./Course');
 const Section = require('./Section');
 const Transaction = require('./Transaction');
+const Lab = require('./Lab');
 
 // Define associations
 
 // User associations
 User.hasOne(Student, { foreignKey: 'userId', as: 'studentProfile' });
 User.hasOne(Faculty, { foreignKey: 'userId', as: 'facultyProfile' });
+User.hasMany(Lab, { foreignKey: 'labInchargeId', as: 'labsIncharge' });
 
 // College associations
 College.belongsTo(User, { foreignKey: 'adminId', as: 'admin' });
@@ -32,6 +34,7 @@ Department.hasMany(Student, { foreignKey: 'departmentId', as: 'students' });
 Department.hasMany(Faculty, { foreignKey: 'departmentId', as: 'faculty' });
 Department.hasMany(Course, { foreignKey: 'departmentId', as: 'courses' });
 Department.hasMany(Section, { foreignKey: 'departmentId', as: 'sections' });
+Department.hasMany(Lab, { foreignKey: 'departmentId', as: 'labs' });
 
 // Student associations
 Student.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -61,6 +64,14 @@ Transaction.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 Transaction.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
 Transaction.belongsTo(User, { foreignKey: 'processedById', as: 'processedBy' });
 
+// Lab associations
+Lab.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
+Lab.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
+Lab.belongsTo(User, { foreignKey: 'labInchargeId', as: 'labIncharge' });
+
+// Add Labs to College associations
+College.hasMany(Lab, { foreignKey: 'collegeId', as: 'labs' });
+
 module.exports = {
   sequelize,
   User,
@@ -70,5 +81,6 @@ module.exports = {
   Faculty,
   Course,
   Section,
-  Transaction
+  Transaction,
+  Lab
 };

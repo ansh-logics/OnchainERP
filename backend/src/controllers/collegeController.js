@@ -437,11 +437,147 @@ const getCollegeStats = async (req, res, next) => {
   }
 };
 
+// @desc    Add department to college
+// @route   POST /api/colleges/:id/departments
+// @access  Private (Admin, Super Admin)
+const addDepartment = async (req, res, next) => {
+  try {
+    const {
+      name,
+      shortName,
+      code,
+      description,
+      programs,
+      sectionsConfig,
+      rollNumberConfig
+    } = req.body;
+
+    const collegeId = req.params.id;
+
+    // Check if college exists
+    const college = await College.findByPk(collegeId);
+    if (!college) {
+      return next(new ErrorResponse('College not found', 404));
+    }
+
+    // Check permissions
+    if (req.user.role !== 'super_admin' && req.user.collegeId !== parseInt(collegeId)) {
+      return next(new ErrorResponse('Not authorized to add department to this college', 403));
+    }
+
+    // Check if department with same code exists globally
+    const existingDepartmentByCode = await Department.findOne({ 
+      where: { code: code.toUpperCase() } 
+    });
+    if (existingDepartmentByCode) {
+      return next(new ErrorResponse('Department with this code already exists', 400));
+    }
+
+    // Check if department with same shortName exists in the college
+    const existingDepartment = await Department.findOne({
+      where: {
+        shortName: shortName.toUpperCase(),
+        collegeId
+      }
+    });
+
+    if (existingDepartment) {
+      return next(new ErrorResponse('Department with this short name already exists in the college', 400));
+    }
+
+    const department = await Department.create({
+      name,
+      shortName: shortName.toUpperCase(),
+      code: code.toUpperCase(),
+      description,
+      collegeId,
+      programs: programs || [],
+      sectionsConfig: sectionsConfig || {},
+      rollNumberConfig: rollNumberConfig || {},
+      isActive: true
+    });
+
+    // Log the activity
+    await LoggingService.logUserAction(
+      'add_department',
+      req.user.id,
+      { 
+        departmentId: department.id,
+        collegeId,
+        departmentName: name,
+        departmentCode: code 
+      },
+      { 
+        userRole: req.user.role,
+        ip: req.ip,
+        userAgent: req.get('User-Agent')
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Department added successfully',
+      data: department
+    });
+
+  } catch (error) {
+    await LoggingService.logError('college_management', 'add_department', req.user?.id, error);
+    next(error);
+  }
+};
+
+// @desc    Get departments for a college
+// @route   GET /api/colleges/:id/departments
+// @access  Private
+const getCollegeDepartments = async (req, res, next) => {
+  try {
+    const collegeId = req.params.id;
+
+    // Check if college exists
+    const college = await College.findByPk(collegeId);
+    if (!college) {
+      return next(new ErrorResponse('College not found', 404));
+    }
+
+    // Check permissions for non-super admin users
+    if (req.user.role !== 'super_admin' && req.user.collegeId !== parseInt(collegeId)) {
+      return next(new ErrorResponse('Not authorized to view departments of this college', 403));
+    }
+
+    const departments = await Department.findAll({
+      where: { 
+        collegeId,
+        isActive: true 
+      },
+      include: [
+        {
+          model: College,
+          as: 'college',
+          attributes: ['id', 'name', 'shortName']
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: departments.length,
+      data: departments
+    });
+
+  } catch (error) {
+    await LoggingService.logError('college_management', 'get_college_departments', req.user?.id, error);
+    next(error);
+  }
+};
+
 module.exports = {
   registerCollege,
   getColleges,
   getCollege,
   updateCollege,
   deleteCollege,
+  addDepartment,
+  getCollegeDepartments,
   getCollegeStats
 };

@@ -1,3 +1,4 @@
+// TEMPORARILY DISABLED - Seeder needs to be updated for PostgreSQL
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
@@ -5,13 +6,17 @@ const bcrypt = require('bcryptjs');
 // Load environment variables
 dotenv.config();
 
-// Import models
-const User = require('../models/User');
-const Student = require('../models/Student');
-const Faculty = require('../models/Faculty');
-const Course = require('../models/Course');
-const Role = require('../models/Role');
-const Permission = require('../models/Permission');
+console.log('Seeder temporarily disabled during database migration');
+console.log('Please use the migration script and manual testing instead');
+process.exit(0);
+
+// Import models - TODO: Update for PostgreSQL
+// const User = require('../models/User');
+// const Student = require('../models/Student');
+// const Faculty = require('../models/Faculty');
+// const Course = require('../models/Course');
+// const Role = require('../models/Role');
+// const Permission = require('../models/Permission');
 
 // Import utilities
 const { initializeRolesAndPermissions } = require('../utils/setupRoles');
