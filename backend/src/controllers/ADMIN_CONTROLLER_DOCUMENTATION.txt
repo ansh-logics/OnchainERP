@@ -1,0 +1,399 @@
+===========================================
+ADMIN CONTROLLER API DOCUMENTATION
+===========================================
+
+This document provides complete details about all Admin Controller endpoints,
+including authentication, authorization, data formats, and example requests.
+
+===========================================
+AUTHENTICATION & AUTHORIZATION
+===========================================
+
+ALL admin endpoints require:
+1. Valid JWT token in Authorization header: Bearer <token>
+2. User role must be 'admin' 
+3. User must be authenticated and authorized
+
+Headers for all requests:
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+===========================================
+ENDPOINT 1: GET DASHBOARD STATISTICS
+===========================================
+
+URL: GET /api/admin/dashboard
+Access: Private/Admin only
+Description: Get comprehensive system statistics for admin dashboard
+
+REQUEST:
+- Method: GET
+- Headers: Authorization Bearer token required
+- Body: None (GET request)
+
+RESPONSE FORMAT:
+```json
+{
+  "success": true,
+  "data": {
+    "userStats": {
+      "totalUsers": 150,
+      "totalStudents": 120,
+      "totalFaculty": 25,
+      "totalAdmin": 5
+    },
+    "courseStats": {
+      "totalCourses": 45
+    },
+    "departmentStats": {
+      "totalDepartments": 8,
+      "departments": ["CSE", "ECE", "ME", "CE", "EEE", "IT", "MBA", "MCA"]
+    },
+    "recentUsers": [
+      {
+        "_id": "64a1b2c3d4e5f6789abc1234",
+        "name": "John Doe",
+        "email": "john.doe@college.edu",
+        "role": "student",
+        "department": "CSE",
+        "createdAt": "2024-01-15T10:30:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+POSTMAN TEST EXAMPLE:
+- URL: {{base_url}}/api/admin/dashboard
+- Method: GET
+- Headers: Authorization: Bearer {{admin_token}}
+
+===========================================
+ENDPOINT 2: GET ATTENDANCE REPORT
+===========================================
+
+URL: GET /api/admin/reports/attendance
+Access: Private/Admin only
+Description: Generate student attendance reports with filtering options
+
+REQUEST:
+- Method: GET
+- Query Parameters (all optional):
+  - courseId: Filter by specific course ObjectId
+  - startDate: Filter from date (YYYY-MM-DD format)
+  - endDate: Filter to date (YYYY-MM-DD format)
+
+QUERY EXAMPLES:
+1. All attendance: /api/admin/reports/attendance
+2. Specific course: /api/admin/reports/attendance?courseId=64a1b2c3d4e5f6789abc1234
+3. Date range: /api/admin/reports/attendance?startDate=2024-01-01&endDate=2024-01-31
+4. Course + Date: /api/admin/reports/attendance?courseId=64a1b2c3d4e5f6789abc1234&startDate=2024-01-01&endDate=2024-01-31
+
+RESPONSE FORMAT:
+```json
+{
+  "success": true,
+  "count": 25,
+  "data": [
+    {
+      "studentId": "64a1b2c3d4e5f6789abc1234",
+      "enrollmentNumber": "CS2024001",
+      "name": "John Doe",
+      "email": "john.doe@college.edu",
+      "attendance": {
+        "2024-01-15": {
+          "CS101": "Present",
+          "CS102": "Absent",
+          "MATH201": "Present"
+        },
+        "2024-01-16": {
+          "CS101": "Present",
+          "CS102": "Present",
+          "MATH201": "Absent"
+        }
+      }
+    }
+  ]
+}
+```
+
+POSTMAN TEST EXAMPLES:
+1. Basic report:
+   - URL: {{base_url}}/api/admin/reports/attendance
+   - Method: GET
+   - Headers: Authorization: Bearer {{admin_token}}
+
+2. Filtered report:
+   - URL: {{base_url}}/api/admin/reports/attendance?startDate=2024-01-01&endDate=2024-01-31
+   - Method: GET
+   - Headers: Authorization: Bearer {{admin_token}}
+
+===========================================
+ENDPOINT 3: GET GRADE REPORT
+===========================================
+
+URL: GET /api/admin/reports/grades
+Access: Private/Admin only
+Description: Generate student grade reports with course filtering
+
+REQUEST:
+- Method: GET
+- Query Parameters (optional):
+  - courseId: Filter by specific course ObjectId
+
+QUERY EXAMPLES:
+1. All grades: /api/admin/reports/grades
+2. Specific course: /api/admin/reports/grades?courseId=64a1b2c3d4e5f6789abc1234
+
+RESPONSE FORMAT:
+```json
+{
+  "success": true,
+  "count": 25,
+  "data": [
+    {
+      "studentId": "64a1b2c3d4e5f6789abc1234",
+      "enrollmentNumber": "CS2024001",
+      "name": "John Doe",
+      "email": "john.doe@college.edu",
+      "courses": {
+        "CS101": {
+          "courseName": "Data Structures",
+          "assignments": [
+            {
+              "assignment": "Assignment 1",
+              "score": 85,
+              "maxScore": 100,
+              "percentage": 85,
+              "gradedBy": "Dr. Smith"
+            },
+            {
+              "assignment": "Mid Exam",
+              "score": 78,
+              "maxScore": 100,
+              "percentage": 78,
+              "gradedBy": "Dr. Smith"
+            }
+          ],
+          "averageScore": 163,
+          "totalMaxScore": 200,
+          "averagePercentage": 81.5
+        }
+      }
+    }
+  ]
+}
+```
+
+POSTMAN TEST EXAMPLES:
+1. All grades:
+   - URL: {{base_url}}/api/admin/reports/grades
+   - Method: GET
+   - Headers: Authorization: Bearer {{admin_token}}
+
+2. Course specific:
+   - URL: {{base_url}}/api/admin/reports/grades?courseId=64a1b2c3d4e5f6789abc1234
+   - Method: GET
+   - Headers: Authorization: Bearer {{admin_token}}
+
+===========================================
+ENDPOINT 4: CREATE DEPARTMENT
+===========================================
+
+URL: POST /api/admin/departments
+Access: Private/Admin only
+Description: Create a new department with optional Head of Department
+
+REQUEST:
+- Method: POST
+- Content-Type: application/json
+
+REQUEST BODY FORMAT:
+```json
+{
+  "name": "Computer Science Engineering",
+  "description": "Department of Computer Science and Engineering offering undergraduate and postgraduate programs in computer science, software engineering, and related fields.",
+  "hod": "64a1b2c3d4e5f6789abc1234"
+}
+```
+
+FIELD DETAILS:
+- name (required): Full department name
+- description (required): Detailed department description
+- hod (optional): ObjectId of the Head of Department (must be existing user)
+
+RESPONSE FORMAT:
+```json
+{
+  "success": true,
+  "message": "Department created successfully",
+  "data": {
+    "name": "Computer Science Engineering",
+    "description": "Department of Computer Science and Engineering offering undergraduate and postgraduate programs in computer science, software engineering, and related fields.",
+    "hod": "64a1b2c3d4e5f6789abc1234"
+  }
+}
+```
+
+ERROR RESPONSES:
+1. Invalid HOD:
+```json
+{
+  "success": false,
+  "error": "User not found with id of 64a1b2c3d4e5f6789abc1234"
+}
+```
+
+2. Missing required fields:
+```json
+{
+  "success": false,
+  "error": "Please provide name and description"
+}
+```
+
+POSTMAN TEST EXAMPLES:
+1. Basic department creation:
+   - URL: {{base_url}}/api/admin/departments
+   - Method: POST
+   - Headers: 
+     * Authorization: Bearer {{admin_token}}
+     * Content-Type: application/json
+   - Body:
+   ```json
+   {
+     "name": "Computer Science Engineering",
+     "description": "Department focusing on computer science, programming, algorithms, and software development."
+   }
+   ```
+
+2. Department with HOD:
+   - URL: {{base_url}}/api/admin/departments
+   - Method: POST
+   - Headers: 
+     * Authorization: Bearer {{admin_token}}
+     * Content-Type: application/json
+   - Body:
+   ```json
+   {
+     "name": "Electronics and Communication Engineering",
+     "description": "Department specializing in electronics, communication systems, and signal processing.",
+     "hod": "64a1b2c3d4e5f6789abc1234"
+   }
+   ```
+
+===========================================
+COMMON ERROR RESPONSES
+===========================================
+
+1. UNAUTHORIZED (401):
+```json
+{
+  "success": false,
+  "error": "Not authorized to access this resource"
+}
+```
+
+2. FORBIDDEN (403):
+```json
+{
+  "success": false,
+  "error": "User role admin is required to access this resource"
+}
+```
+
+3. INVALID TOKEN (401):
+```json
+{
+  "success": false,
+  "error": "Not authorized, token failed"
+}
+```
+
+4. SERVER ERROR (500):
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
+===========================================
+AUTHENTICATION FLOW FOR TESTING
+===========================================
+
+STEP 1: Login as Admin
+- URL: POST {{base_url}}/api/auth/login
+- Body:
+```json
+{
+  "email": "admin@college.edu",
+  "password": "admin_password"
+}
+```
+
+STEP 2: Copy token from login response
+```json
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "role": "admin"
+  }
+}
+```
+
+STEP 3: Use token in subsequent requests
+- Header: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+===========================================
+POSTMAN ENVIRONMENT VARIABLES
+===========================================
+
+Set these variables in Postman environment:
+- base_url: http://localhost:5000 (or your server URL)
+- admin_token: (copy from login response)
+
+===========================================
+TESTING CHECKLIST
+===========================================
+
+□ Test dashboard statistics endpoint
+□ Test attendance report without filters
+□ Test attendance report with courseId filter
+□ Test attendance report with date range filter
+□ Test attendance report with both courseId and date filters
+□ Test grade report without filters
+□ Test grade report with courseId filter
+□ Test department creation without HOD
+□ Test department creation with valid HOD
+□ Test department creation with invalid HOD
+□ Test all endpoints with invalid/missing token
+□ Test all endpoints with non-admin user token
+
+===========================================
+NOTES
+===========================================
+
+1. All endpoints require admin role - students and faculty cannot access
+2. Date filters use YYYY-MM-DD format (ISO date format)
+3. ObjectIds must be valid MongoDB ObjectIds (24 character hex strings)
+4. The create department endpoint is currently a mock implementation
+5. Attendance and grade reports depend on existing student data
+6. Always check response status codes and error messages
+7. Token expires based on JWT configuration (check server settings)
+
+===========================================
+SUPPORT & TROUBLESHOOTING
+===========================================
+
+Common Issues:
+1. Token expired: Login again and get new token
+2. Invalid ObjectId: Ensure 24-character hex format
+3. No data in reports: Ensure students have attendance/grade records
+4. 403 Forbidden: Ensure user has admin role
+5. 404 endpoints: Check base URL and route paths
+
+For debugging, check server logs for detailed error messages.
