@@ -14,6 +14,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Building } from "lucide-react"
+import { useDepartments } from "@/lib/hooks/use-api"
+import { OnchainERPAPI } from "@/lib/api-client"
 
 interface AddDepartmentModalProps {
   onDepartmentAdded?: () => void
@@ -21,7 +23,6 @@ interface AddDepartmentModalProps {
 
 export function AddDepartmentModal({ onDepartmentAdded }: AddDepartmentModalProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     shortName: "",
@@ -40,105 +41,57 @@ export function AddDepartmentModal({ onDepartmentAdded }: AddDepartmentModalProp
     }
   })
 
+  // Use the departments hook for creating department
+  const { createDepartment, loading: isLoading, error } = useDepartments()
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
 
     try {
-      const token = localStorage.getItem("token")
-      
-      // Get user info to get college ID
-      const userResponse = await fetch('/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-      const userData = await userResponse.json()
-      
-      // Ensure college ID is properly extracted and converted to string
-      const collegeId = userData.data?.college?._id || userData.data?.college
-      const collegeIdString = typeof collegeId === 'string' ? collegeId : collegeId?.toString()
-      
       const departmentData = {
         name: formData.name,
         shortName: formData.shortName,
         code: formData.code,
         description: formData.description,
-        college: collegeIdString,
-        hod: formData.hod || undefined, // Convert empty string to undefined
-        programs: formData.programs ? formData.programs.split(',').map(program => {
-          const trimmed = program.trim();
-          // Parse program format: "B.Tech (4 years, 8 semesters)" or just "B.Tech"
-          if (trimmed.includes('(')) {
-            const [degree, details] = trimmed.split('(');
-            const detailsMatch = details.match(/(\d+)\s*years?,\s*(\d+)\s*semesters?/);
-            return {
-              name: `${degree.trim()} Program`,
-              degree: degree.trim(),
-              duration: detailsMatch ? parseInt(detailsMatch[1]) : 4,
-              totalSemesters: detailsMatch ? parseInt(detailsMatch[2]) : 8
-            };
-          }
-          // Default values for simple degree format
-          return {
-            name: `${trimmed} Program`,
-            degree: trimmed,
-            duration: trimmed.includes('M.') ? 2 : 4,
-            totalSemesters: trimmed.includes('M.') ? 4 : 8
-          };
-        }) : [],
+        programs: formData.programs ? formData.programs.split(',').map(p => p.trim()) : [],
+        studentsPerSection: parseInt(formData.sectionsConfig.studentsPerSection) || 60,
+        totalSections: parseInt(formData.sectionsConfig.totalSections) || 2,
+        totalIntake: (parseInt(formData.sectionsConfig.studentsPerSection) || 60) * (parseInt(formData.sectionsConfig.totalSections) || 2),
         sectionsConfig: {
-          studentsPerSection: parseInt(formData.sectionsConfig.studentsPerSection) || 60,
-          totalSections: parseInt(formData.sectionsConfig.totalSections) || 2,
-          sectionNamingPattern: formData.sectionsConfig.sectionNamingPattern
+          maxSections: parseInt(formData.sectionsConfig.totalSections) || 2,
+          studentsPerSection: parseInt(formData.sectionsConfig.studentsPerSection) || 60
         },
         rollNumberConfig: {
-          startingNumber: parseInt(formData.rollNumberConfig.startingNumber) || 1,
-          pattern: formData.rollNumberConfig.pattern || "{YEAR}{DEPT}{###}"
+          prefix: formData.shortName,
+          startNumber: parseInt(formData.rollNumberConfig.startingNumber) || 1
         }
       }
       
-      console.log('Department data being sent:', departmentData)
+      await createDepartment(departmentData)
       
-      const response = await fetch('/api/admin/departments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+      // Reset form and close modal on success
+      setIsOpen(false)
+      setFormData({
+        name: "",
+        shortName: "",
+        code: "",
+        description: "",
+        hod: "",
+        programs: "",
+        sectionsConfig: {
+          studentsPerSection: "",
+          totalSections: "",
+          sectionNamingPattern: "A,B,C..."
         },
-        body: JSON.stringify(departmentData),
+        rollNumberConfig: {
+          startingNumber: "",
+          pattern: "{YEAR}{DEPT}{###}"
+        }
       })
-
-      const data = await response.json()
-      
-      if (data.success) {
-        setIsOpen(false)
-        setFormData({
-          name: "",
-          shortName: "",
-          code: "",
-          description: "",
-          hod: "",
-          programs: "",
-          sectionsConfig: {
-            studentsPerSection: "",
-            totalSections: "",
-            sectionNamingPattern: "A,B,C..."
-          },
-          rollNumberConfig: {
-            startingNumber: "",
-            pattern: "{YEAR}{DEPT}{###}"
-          }
-        })
-        onDepartmentAdded?.()
-      } else {
-        alert(data.message || 'Failed to create department')
-      }
-    } catch (error) {
+      onDepartmentAdded?.()
+    } catch (error: any) {
       console.error('Error creating department:', error)
-      alert('Failed to create department')
-    } finally {
-      setIsLoading(false)
+      alert(OnchainERPAPI.handleApiError(error))
     }
   }
 

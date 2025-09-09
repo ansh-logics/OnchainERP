@@ -1,20 +1,21 @@
-// OnchainERP Database Schema
-// Generated from Sequelize and Mongoose models
-// This represents a hybrid PostgreSQL + MongoDB architecture
+// OnchainERP Complete Database Schema
+// Designed for comprehensive ERP system as per Problem Statement 25103
+// Hybrid PostgreSQL + MongoDB architecture for optimal performance
 
 // ============================================
-// POSTGRESQL TABLES (Relational Data)
+// POSTGRESQL TABLES (Structured Relational Data)
 // ============================================
 
 Table users {
   id uuid [primary key, default: `gen_random_uuid()`]
-  name varchar(50) [not null]
+  name varchar(100) [not null]
   email varchar [not null, unique]
   password varchar [not null]
   role user_role [not null]
   studentId varchar [unique]
   facultyId varchar [unique]
   phone varchar(15)
+  profilePicture varchar
   isActive boolean [default: true]
   isEmailVerified boolean [default: false]
   lastLogin timestamp
@@ -28,12 +29,13 @@ Table users {
     role
     studentId
     facultyId
+    isActive
   }
 }
 
 Table colleges {
   id uuid [primary key, default: `gen_random_uuid()`]
-  name varchar(100) [not null]
+  name varchar(200) [not null]
   shortName varchar(20) [not null, unique]
   establishedYear integer [not null]
   affiliatedUniversity varchar [not null]
@@ -48,7 +50,7 @@ Table colleges {
   addressCountry varchar [default: 'India']
   
   // Contact fields
-  phone varchar(10) [not null]
+  phone varchar(15) [not null]
   email varchar [not null]
   website varchar
   fax varchar
@@ -64,6 +66,11 @@ Table colleges {
   libraryDigitalResources boolean [default: false]
   libraryArea integer [note: 'Library area in sq ft']
   
+  // Hostel details
+  totalHostels integer [default: 0]
+  totalHostelRooms integer [default: 0]
+  totalHostelCapacity integer [default: 0]
+  
   // Admin reference
   adminId uuid [not null, ref: > users.id]
   
@@ -76,6 +83,7 @@ Table colleges {
   // Academic year settings
   academicStartMonth integer [default: 7]
   academicEndMonth integer [default: 6]
+  currentAcademicYear varchar [not null]
   
   isActive boolean [default: true]
   createdAt timestamp [default: `now()`]
@@ -86,25 +94,30 @@ Table colleges {
     (addressCity, addressState)
     collegeType
     adminId
+    currentAcademicYear
   }
 }
 
 Table departments {
   id uuid [primary key, default: `gen_random_uuid()`]
   collegeId uuid [not null, ref: > colleges.id]
-  name varchar [not null]
-  shortName varchar [not null]
-  code varchar [not null, unique]
+  name varchar(100) [not null]
+  shortName varchar(20) [not null]
+  code varchar(20) [not null, unique]
   description text [not null]
   hodId uuid [ref: > users.id]
   
   // Section configuration
-  studentsPerSection integer [not null]
-  totalSections integer [not null]
+  studentsPerSection integer [not null, default: 60]
+  totalSections integer [not null, default: 1]
   
   // Intake capacity
   totalIntake integer [not null]
   currentStrength integer [default: 0]
+  
+  // Department facilities
+  totalFaculty integer [default: 0]
+  totalLabs integer [default: 0]
   
   isActive boolean [default: true]
   createdAt timestamp [default: `now()`]
@@ -114,6 +127,7 @@ Table departments {
     collegeId
     code
     hodId
+    isActive
   }
 }
 
@@ -122,9 +136,9 @@ Table courses {
   collegeId uuid [not null, ref: > colleges.id]
   departmentId uuid [not null, ref: > departments.id]
   
-  code varchar [not null, unique]
-  name varchar [not null]
-  shortName varchar
+  code varchar(20) [not null, unique]
+  name varchar(200) [not null]
+  shortName varchar(50)
   description text [not null]
   
   // Academic details
@@ -136,16 +150,20 @@ Table courses {
   theoryHours integer [default: 0]
   labHours integer [default: 0]
   tutorialHours integer [default: 0]
+  totalHours integer [not null]
   
   // Prerequisites
   prerequisites text [note: 'JSON array of prerequisite course IDs']
   
-  // Assessment
+  // Assessment structure
   hasInternalAssessment boolean [default: true]
   hasFinalExam boolean [default: true]
   internalMarks integer [default: 40]
   finalMarks integer [default: 60]
   passingMarks integer [default: 40]
+  
+  // Faculty assignment
+  primaryFacultyId uuid [ref: > faculty.id]
   
   isActive boolean [default: true]
   createdAt timestamp [default: `now()`]
@@ -157,6 +175,7 @@ Table courses {
     code
     semester
     courseType
+    primaryFacultyId
   }
 }
 
@@ -167,19 +186,19 @@ Table faculty {
   departmentId uuid [not null, ref: > departments.id]
   
   // Faculty identification
-  employeeId varchar [not null, unique]
-  facultyId varchar [unique]
+  employeeId varchar(20) [not null, unique]
+  facultyId varchar(20) [unique]
   
   // Professional details
   designation faculty_designation [not null]
-  qualification varchar [not null]
-  specialization varchar
+  qualification varchar(500) [not null]
+  specialization varchar(200)
   experience integer [note: 'Experience in years']
   
   // Employment details
   joiningDate date [not null]
   employmentType employment_type [not null]
-  salary decimal(10,2)
+  salary decimal(12,2)
   
   // Personal details
   dateOfBirth date [not null]
@@ -189,8 +208,8 @@ Table faculty {
   
   // Contact details
   personalEmail varchar
-  personalPhone varchar
-  emergencyContact varchar
+  personalPhone varchar(15)
+  emergencyContact varchar(15)
   
   // Address
   addressStreet varchar
@@ -201,6 +220,7 @@ Table faculty {
   
   // Administrative roles
   isHOD boolean [default: false]
+  isClassTeacher boolean [default: false]
   
   isActive boolean [default: true]
   createdAt timestamp [default: `now()`]
@@ -213,6 +233,7 @@ Table faculty {
     employeeId
     facultyId
     designation
+    isHOD
   }
 }
 
@@ -224,13 +245,13 @@ Table students {
   sectionId uuid [ref: > sections.id]
   
   // Student identification
-  rollNumber varchar [unique]
-  enrollmentNumber varchar [not null, unique]
-  studentId varchar [unique]
+  rollNumber varchar(20) [unique]
+  enrollmentNumber varchar(30) [not null, unique]
+  studentId varchar(20) [unique]
   
   // Academic details
-  batch varchar [not null]
-  program varchar [not null]
+  batch varchar(10) [not null]
+  program varchar(50) [not null]
   admissionYear integer [not null]
   currentSemester integer [default: 1]
   
@@ -239,12 +260,12 @@ Table students {
   gender gender_type [not null]
   bloodGroup blood_group
   category student_category [not null]
-  religion varchar
-  nationality varchar [default: 'Indian']
+  religion varchar(50)
+  nationality varchar(50) [default: 'Indian']
   
   // Contact details
   personalEmail varchar
-  personalPhone varchar
+  personalPhone varchar(15)
   
   // Permanent Address
   permanentAddressStreet varchar
@@ -261,14 +282,20 @@ Table students {
   currentAddressCountry varchar [default: 'India']
   
   // Guardian details
-  guardianName varchar [not null]
+  guardianName varchar(100) [not null]
   guardianRelation guardian_relation [not null]
-  guardianPhone varchar [not null]
+  guardianPhone varchar(15) [not null]
   guardianEmail varchar
-  guardianOccupation varchar
+  guardianOccupation varchar(100)
   
   // Academic performance
   cgpa decimal(3,2)
+  totalCredits integer [default: 0]
+  
+  // Hostel information
+  isHostelResident boolean [default: false]
+  hostelId uuid [ref: > hostels.id]
+  roomId uuid [ref: > hostel_rooms.id]
   
   admissionStatus admission_status [default: 'applied']
   isActive boolean [default: true]
@@ -284,6 +311,8 @@ Table students {
     enrollmentNumber
     batch
     admissionStatus
+    hostelId
+    roomId
   }
 }
 
@@ -292,9 +321,9 @@ Table sections {
   collegeId uuid [not null, ref: > colleges.id]
   departmentId uuid [not null, ref: > departments.id]
   
-  name varchar [not null]
-  code varchar [not null, unique]
-  batch varchar [not null]
+  name varchar(50) [not null]
+  code varchar(10) [not null, unique]
+  batch varchar(10) [not null]
   semester integer [not null]
   
   // Section configuration
@@ -303,6 +332,9 @@ Table sections {
   
   // Class teacher
   classTeacherId uuid [ref: > faculty.id]
+  
+  // Classroom assignment
+  defaultClassroomId uuid [ref: > classrooms.id]
   
   isActive boolean [default: true]
   createdAt timestamp [default: `now()`]
@@ -320,21 +352,22 @@ Table sections {
 
 Table labs {
   id uuid [primary key, default: `gen_random_uuid()`]
-  name varchar [not null]
-  labCode varchar [not null, unique]
+  collegeId uuid [not null, ref: > colleges.id]
+  departmentId uuid [not null, ref: > departments.id]
+  
+  name varchar(100) [not null]
+  labCode varchar(20) [not null, unique]
   description text
-  location varchar
+  location varchar(100)
   capacity integer
   equipment json [default: '[]']
   maintenance json [default: '[]']
   availability json [default: '{}']
+  
+  // Lab management
+  labInchargeId uuid [ref: > faculty.id]
+  
   isActive boolean [default: true]
-  
-  // Foreign Keys
-  collegeId uuid [not null, ref: > colleges.id]
-  departmentId uuid [not null, ref: > departments.id]
-  labInchargeId uuid [ref: > users.id]
-  
   createdAt timestamp [default: `now()`]
   updatedAt timestamp [default: `now()`]
   deletedAt timestamp [note: 'Soft delete']
@@ -348,19 +381,489 @@ Table labs {
   }
 }
 
+// ============================================
+// NEW TABLES FOR COMPLETE ERP FUNCTIONALITY
+// ============================================
+
+Table hostels {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  
+  name varchar(100) [not null]
+  hostelCode varchar(20) [not null, unique]
+  hostelType hostel_type [not null]
+  gender gender_type [not null, note: 'Boys/Girls/Co-ed hostel']
+  
+  // Location and infrastructure
+  location varchar(200)
+  totalFloors integer [not null]
+  totalRooms integer [not null]
+  totalCapacity integer [not null]
+  currentOccupancy integer [default: 0]
+  
+  // Facilities
+  facilities json [default: '[]', note: 'Array of available facilities']
+  
+  // Management
+  wardenId uuid [ref: > faculty.id]
+  
+  // Hostel fees
+  monthlyFee decimal(10,2) [not null]
+  securityDeposit decimal(10,2) [not null]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    hostelCode
+    hostelType
+    gender
+    wardenId
+  }
+}
+
+Table hostel_rooms {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  hostelId uuid [not null, ref: > hostels.id]
+  
+  roomNumber varchar(10) [not null]
+  floor integer [not null]
+  roomType room_type [not null]
+  capacity integer [not null]
+  currentOccupancy integer [default: 0]
+  
+  // Room amenities
+  amenities json [default: '[]']
+  
+  // Room condition
+  condition room_condition [default: 'good']
+  lastMaintenanceDate date
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    hostelId
+    (hostelId, roomNumber) [unique]
+    roomType
+    condition
+  }
+}
+
+Table hostel_allocations {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  studentId uuid [not null, ref: > students.id]
+  hostelId uuid [not null, ref: > hostels.id]
+  roomId uuid [not null, ref: > hostel_rooms.id]
+  
+  allocationDate date [not null]
+  checkInDate date
+  checkOutDate date
+  
+  // Allocation details
+  academicYear varchar(10) [not null]
+  semester integer [not null]
+  
+  // Status
+  status allocation_status [default: 'allocated']
+  
+  // Fees
+  monthlyFee decimal(10,2) [not null]
+  securityDeposit decimal(10,2) [not null]
+  
+  // Remarks
+  remarks text
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    studentId
+    hostelId
+    roomId
+    academicYear
+    status
+    (studentId, academicYear) [unique]
+  }
+}
+
+Table attendance {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  studentId uuid [not null, ref: > students.id]
+  courseId uuid [not null, ref: > courses.id]
+  facultyId uuid [not null, ref: > faculty.id]
+  
+  attendanceDate date [not null]
+  period integer [not null, note: 'Class period number']
+  
+  status attendance_status [not null]
+  
+  // Class details
+  classType class_type [default: 'theory']
+  topic varchar(200)
+  
+  // Marking details
+  markedBy uuid [not null, ref: > faculty.id]
+  markedAt timestamp [default: `now()`]
+  
+  // Modification tracking
+  modifiedBy uuid [ref: > faculty.id]
+  modifiedAt timestamp
+  modificationReason varchar(200)
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    studentId
+    courseId
+    facultyId
+    attendanceDate
+    (studentId, courseId, attendanceDate, period) [unique]
+    status
+  }
+}
+
+Table assignments {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  courseId uuid [not null, ref: > courses.id]
+  facultyId uuid [not null, ref: > faculty.id]
+  
+  title varchar(200) [not null]
+  description text [not null]
+  instructions text
+  
+  // Assignment details
+  assignmentType assignment_type [not null]
+  maxMarks integer [not null]
+  
+  // Dates
+  assignedDate date [not null]
+  dueDate date [not null]
+  submissionStartDate date [not null]
+  submissionEndDate date [not null]
+  
+  // Submission settings
+  allowLateSubmission boolean [default: false]
+  lateSubmissionPenalty integer [default: 0, note: 'Percentage penalty']
+  
+  // File requirements
+  allowedFileTypes json [default: '["pdf", "doc", "docx"]']
+  maxFileSize integer [default: 10485760, note: 'Size in bytes']
+  maxFiles integer [default: 1]
+  
+  // Status
+  status assignment_status [default: 'active']
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    courseId
+    facultyId
+    assignmentType
+    dueDate
+    status
+  }
+}
+
+Table assignment_submissions {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  assignmentId uuid [not null, ref: > assignments.id]
+  studentId uuid [not null, ref: > students.id]
+  
+  submissionDate timestamp [not null]
+  isLateSubmission boolean [default: false]
+  
+  // Submission content
+  submissionText text
+  
+  // Grading
+  marksObtained integer
+  feedback text
+  gradedBy uuid [ref: > faculty.id]
+  gradedAt timestamp
+  
+  // Status
+  status submission_status [default: 'submitted']
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    assignmentId
+    studentId
+    (assignmentId, studentId) [unique]
+    submissionDate
+    status
+  }
+}
+
+Table exams {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  courseId uuid [not null, ref: > courses.id]
+  
+  examName varchar(100) [not null]
+  examType exam_type [not null]
+  
+  // Exam schedule
+  examDate date [not null]
+  startTime time [not null]
+  endTime time [not null]
+  duration integer [not null, note: 'Duration in minutes']
+  
+  // Exam details
+  maxMarks integer [not null]
+  passingMarks integer [not null]
+  
+  // Exam hall and logistics
+  examHallId uuid [ref: > exam_halls.id]
+  invigilatorId uuid [ref: > faculty.id]
+  
+  // Instructions
+  instructions text
+  
+  // Status
+  status exam_status [default: 'scheduled']
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    courseId
+    examType
+    examDate
+    status
+    examHallId
+  }
+}
+
+Table exam_halls {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  
+  hallName varchar(100) [not null]
+  hallCode varchar(20) [not null, unique]
+  location varchar(200)
+  capacity integer [not null]
+  
+  // Hall facilities
+  facilities json [default: '[]']
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    hallCode
+    capacity
+  }
+}
+
+Table exam_results {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  examId uuid [not null, ref: > exams.id]
+  studentId uuid [not null, ref: > students.id]
+  
+  marksObtained integer [not null]
+  grade varchar(5)
+  gradePoints decimal(3,2)
+  
+  // Result status
+  status result_status [default: 'published']
+  
+  // Evaluation details
+  evaluatedBy uuid [ref: > faculty.id]
+  evaluatedAt timestamp
+  
+  // Remarks
+  remarks text
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    examId
+    studentId
+    (examId, studentId) [unique]
+    status
+  }
+}
+
+Table library_books {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  
+  // Book identification
+  isbn varchar(20) [unique]
+  accessionNumber varchar(20) [not null, unique]
+  
+  // Book details
+  title varchar(500) [not null]
+  author varchar(200) [not null]
+  publisher varchar(200)
+  edition varchar(50)
+  publicationYear integer
+  
+  // Classification
+  category varchar(100)
+  subject varchar(100)
+  language varchar(50) [default: 'English']
+  
+  // Physical details
+  totalCopies integer [not null, default: 1]
+  availableCopies integer [not null, default: 1]
+  
+  // Book condition and location
+  location varchar(100)
+  condition book_condition [default: 'good']
+  
+  // Pricing
+  price decimal(10,2)
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    isbn
+    accessionNumber
+    title
+    author
+    category
+    subject
+  }
+}
+
+Table library_issues {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  bookId uuid [not null, ref: > library_books.id]
+  studentId uuid [not null, ref: > students.id]
+  
+  issueDate date [not null]
+  dueDate date [not null]
+  returnDate date
+  
+  // Issue details
+  issuedBy uuid [not null, ref: > users.id]
+  returnedTo uuid [ref: > users.id]
+  
+  // Status
+  status issue_status [default: 'issued']
+  
+  // Fine calculation
+  fineAmount decimal(8,2) [default: 0]
+  finePaid boolean [default: false]
+  fineWaivedBy uuid [ref: > users.id]
+  
+  // Remarks
+  issueRemarks text
+  returnRemarks text
+  
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    bookId
+    studentId
+    issueDate
+    dueDate
+    status
+    returnDate
+  }
+}
+
+Table classrooms {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  
+  roomNumber varchar(20) [not null]
+  building varchar(100)
+  floor integer
+  capacity integer [not null]
+  
+  // Room type and facilities
+  roomType classroom_type [not null]
+  facilities json [default: '[]']
+  
+  // Equipment
+  hasProjector boolean [default: false]
+  hasAC boolean [default: false]
+  hasSmartBoard boolean [default: false]
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    (collegeId, roomNumber) [unique]
+    roomType
+    capacity
+  }
+}
+
+Table timetable {
+  id uuid [primary key, default: `gen_random_uuid()`]
+  collegeId uuid [not null, ref: > colleges.id]
+  sectionId uuid [not null, ref: > sections.id]
+  courseId uuid [not null, ref: > courses.id]
+  facultyId uuid [not null, ref: > faculty.id]
+  classroomId uuid [ref: > classrooms.id]
+  
+  // Time details
+  dayOfWeek integer [not null, note: '1=Monday, 7=Sunday']
+  startTime time [not null]
+  endTime time [not null]
+  period integer [not null]
+  
+  // Academic details
+  academicYear varchar(10) [not null]
+  semester integer [not null]
+  
+  // Class type
+  classType class_type [default: 'theory']
+  
+  // Effective dates
+  effectiveFrom date [not null]
+  effectiveTo date
+  
+  isActive boolean [default: true]
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+
+  indexes {
+    collegeId
+    sectionId
+    courseId
+    facultyId
+    dayOfWeek
+    period
+    academicYear
+    semester
+  }
+}
+
 Table transactions {
   id uuid [primary key, default: `gen_random_uuid()`]
   collegeId uuid [not null, ref: > colleges.id]
   
-  // Transaction type
+  // Transaction type and category
   type transaction_type [not null]
-  
-  // Category
   category transaction_category [not null]
   
   // Amount in paisa for precision
   amount bigint [not null]
-  
   description varchar(500) [not null]
   
   // Student reference for fee payments
@@ -368,20 +871,28 @@ Table transactions {
   
   // Payment details
   paymentMethod payment_method [not null]
-  
   status transaction_status [default: 'pending']
   
+  // Dates
   dueDate timestamp
   paidDate timestamp
   
-  referenceNumber varchar [not null, unique]
+  // Reference numbers
+  referenceNumber varchar(50) [not null, unique]
+  bankReferenceNumber varchar(100)
+  receiptNumber varchar(50)
   
   // Academic details
-  academicYear varchar
+  academicYear varchar(10)
   semester integer
   
-  // Processing user
+  // Processing details
   processedById uuid [ref: > users.id]
+  approvedBy uuid [ref: > users.id]
+  approvedAt timestamp
+  
+  // Additional details
+  notes text
   
   createdAt timestamp [default: `now()`]
   updatedAt timestamp [default: `now()`]
@@ -395,15 +906,13 @@ Table transactions {
     referenceNumber
     paidDate
     academicYear
+    dueDate
   }
 }
 
 // ============================================
-// MONGODB COLLECTIONS (Document Data)
+// MONGODB COLLECTIONS (Unstructured Data)
 // ============================================
-
-// Note: MongoDB collections are represented here for documentation
-// but DBML doesn't natively support MongoDB schema definitions
 
 Table analytics [note: 'MongoDB Collection - Analytics and reporting data'] {
   _id ObjectId [primary key]
@@ -508,6 +1017,44 @@ Table system_logs [note: 'MongoDB Collection - System logs for audit trail, user
   updatedAt timestamp [default: `now()`]
 }
 
+Table academic_calendar [note: 'MongoDB Collection - Flexible academic calendar and events'] {
+  _id ObjectId [primary key]
+  collegeId varchar [not null, note: 'UUID from PostgreSQL']
+  title varchar(200) [not null]
+  description text
+  eventType calendar_event_type [not null]
+  startDate timestamp [not null]
+  endDate timestamp
+  isAllDay boolean [default: false]
+  location varchar(200)
+  organizer varchar [note: 'User UUID from PostgreSQL']
+  attendees json [note: 'Array of user UUIDs']
+  reminderSettings json [note: 'Reminder configuration']
+  metadata json [note: 'Flexible event data']
+  status event_status [default: 'scheduled']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
+Table announcements [note: 'MongoDB Collection - College announcements and notices'] {
+  _id ObjectId [primary key]
+  collegeId varchar [not null, note: 'UUID from PostgreSQL']
+  authorId varchar [not null, note: 'User UUID from PostgreSQL']
+  title varchar(300) [not null]
+  content text [not null]
+  announcementType announcement_type [not null]
+  targetAudience json [note: 'Array of roles/departments/sections']
+  priority announcement_priority [default: 'normal']
+  publishDate timestamp [not null]
+  expiryDate timestamp
+  attachments json [note: 'Array of file references']
+  isPublished boolean [default: false]
+  viewCount integer [default: 0]
+  metadata json [note: 'Additional announcement data']
+  createdAt timestamp [default: `now()`]
+  updatedAt timestamp [default: `now()`]
+}
+
 // ============================================
 // ENUMS
 // ============================================
@@ -517,6 +1064,8 @@ Enum user_role {
   faculty
   admin
   cashier
+  librarian
+  warden
   super_admin
 }
 
@@ -525,6 +1074,7 @@ Enum college_type {
   Private
   Autonomous
   Deemed
+  Affiliated
 }
 
 Enum naac_grade {
@@ -544,6 +1094,7 @@ Enum course_type {
   Laboratory
   Project
   Internship
+  Seminar
 }
 
 Enum faculty_designation {
@@ -554,6 +1105,7 @@ Enum faculty_designation {
   "Senior Lecturer"
   "Guest Faculty"
   "Visiting Faculty"
+  "Lab Assistant"
 }
 
 Enum employment_type {
@@ -561,6 +1113,7 @@ Enum employment_type {
   Contract
   "Part-time"
   Guest
+  Temporary
 }
 
 Enum gender_type {
@@ -593,12 +1146,15 @@ Enum student_category {
   SC
   ST
   EWS
+  PH
 }
 
 Enum guardian_relation {
   Father
   Mother
   Guardian
+  Uncle
+  Aunt
   Other
 }
 
@@ -609,6 +1165,127 @@ Enum admission_status {
   graduated
   dropped
   suspended
+  transferred
+}
+
+Enum hostel_type {
+  Boys
+  Girls
+  "Co-ed"
+}
+
+Enum room_type {
+  Single
+  Double
+  Triple
+  Quadruple
+  Dormitory
+}
+
+Enum room_condition {
+  excellent
+  good
+  average
+  poor
+  "under_maintenance"
+}
+
+Enum allocation_status {
+  allocated
+  occupied
+  vacated
+  transferred
+  cancelled
+}
+
+Enum attendance_status {
+  present
+  absent
+  late
+  excused
+}
+
+Enum class_type {
+  theory
+  practical
+  tutorial
+  seminar
+  project
+}
+
+Enum assignment_type {
+  homework
+  project
+  presentation
+  lab_report
+  essay
+  quiz
+  group_work
+}
+
+Enum assignment_status {
+  draft
+  active
+  closed
+  cancelled
+}
+
+Enum submission_status {
+  submitted
+  late_submitted
+  graded
+  returned
+  resubmitted
+}
+
+Enum exam_type {
+  internal
+  final
+  supplementary
+  practical
+  viva
+  project_evaluation
+}
+
+Enum exam_status {
+  scheduled
+  ongoing
+  completed
+  cancelled
+  postponed
+}
+
+Enum result_status {
+  published
+  draft
+  withheld
+  cancelled
+}
+
+Enum book_condition {
+  excellent
+  good
+  average
+  poor
+  damaged
+  lost
+}
+
+Enum issue_status {
+  issued
+  returned
+  overdue
+  lost
+  damaged
+}
+
+Enum classroom_type {
+  lecture_hall
+  laboratory
+  tutorial_room
+  seminar_hall
+  auditorium
+  conference_room
 }
 
 Enum transaction_type {
@@ -628,6 +1305,7 @@ Enum transaction_category {
   activity_fee
   late_fee
   fine
+  caution_money
   other_income
   
   // Expense categories
@@ -654,6 +1332,8 @@ Enum payment_method {
   cheque
   dd
   online
+  neft
+  rtgs
 }
 
 Enum transaction_status {
@@ -662,6 +1342,7 @@ Enum transaction_status {
   overdue
   cancelled
   refunded
+  partial
 }
 
 // MongoDB Enums (for documentation)
@@ -671,6 +1352,10 @@ Enum analytics_type {
   financial_stats
   academic_performance
   system_usage
+  attendance_report
+  exam_analysis
+  hostel_occupancy
+  library_usage
   custom_report
 }
 
@@ -680,6 +1365,8 @@ Enum analytics_period {
   monthly
   quarterly
   yearly
+  semester
+  academic_year
   custom
 }
 
@@ -694,6 +1381,8 @@ Enum config_scope {
   college
   department
   user
+  hostel
+  library
 }
 
 Enum config_data_type {
@@ -711,6 +1400,10 @@ Enum file_entity_type {
   course
   assignment
   announcement
+  exam
+  result
+  library
+  hostel
 }
 
 Enum file_type {
@@ -719,6 +1412,8 @@ Enum file_type {
   video
   audio
   archive
+  spreadsheet
+  presentation
   other
 }
 
@@ -735,6 +1430,12 @@ Enum file_category {
   college_logo
   college_image
   lab_image
+  exam_paper
+  answer_sheet
+  result
+  transcript
+  hostel_document
+  library_card
   other
 }
 
@@ -742,6 +1443,8 @@ Enum notification_recipient_type {
   user
   role
   department
+  section
+  hostel
   college
   all
 }
@@ -756,6 +1459,10 @@ Enum notification_type {
   admission_update
   event_reminder
   deadline_alert
+  exam_schedule
+  result_published
+  hostel_notice
+  library_reminder
   general
 }
 
@@ -786,16 +1493,67 @@ Enum log_status {
   warning
 }
 
+Enum calendar_event_type {
+  exam
+  holiday
+  admission
+  registration
+  orientation
+  cultural
+  sports
+  academic
+  administrative
+  maintenance
+  meeting
+  workshop
+  seminar
+  conference
+  other
+}
+
+Enum event_status {
+  scheduled
+  ongoing
+  completed
+  cancelled
+  postponed
+}
+
+Enum announcement_type {
+  general
+  academic
+  administrative
+  exam
+  admission
+  fee
+  hostel
+  library
+  placement
+  cultural
+  sports
+  emergency
+  maintenance
+}
+
+Enum announcement_priority {
+  low
+  normal
+  high
+  urgent
+}
+
 // ============================================
 // RELATIONSHIPS SUMMARY
 // ============================================
 
 // PostgreSQL Relationships:
+// Core System
 // - colleges -> users (adminId)
 // - departments -> colleges (collegeId)
 // - departments -> users (hodId) [optional]
 // - courses -> colleges (collegeId)
 // - courses -> departments (departmentId)
+// - courses -> faculty (primaryFacultyId) [optional]
 // - faculty -> users (userId)
 // - faculty -> colleges (collegeId)
 // - faculty -> departments (departmentId)
@@ -806,14 +1564,61 @@ Enum log_status {
 // - sections -> colleges (collegeId)
 // - sections -> departments (departmentId)
 // - sections -> faculty (classTeacherId) [optional]
+// - sections -> classrooms (defaultClassroomId) [optional]
+
+// Academic Operations
+// - attendance -> students (studentId)
+// - attendance -> courses (courseId)
+// - attendance -> faculty (facultyId, markedBy)
+// - assignments -> courses (courseId)
+// - assignments -> faculty (facultyId)
+// - assignment_submissions -> assignments (assignmentId)
+// - assignment_submissions -> students (studentId)
+// - exams -> colleges (collegeId)
+// - exams -> courses (courseId)
+// - exams -> exam_halls (examHallId) [optional]
+// - exams -> faculty (invigilatorId) [optional]
+// - exam_results -> exams (examId)
+// - exam_results -> students (studentId)
+
+// Hostel Management
+// - hostels -> colleges (collegeId)
+// - hostels -> faculty (wardenId) [optional]
+// - hostel_rooms -> hostels (hostelId)
+// - hostel_allocations -> students (studentId)
+// - hostel_allocations -> hostels (hostelId)
+// - hostel_allocations -> hostel_rooms (roomId)
+// - students -> hostels (hostelId) [optional]
+// - students -> hostel_rooms (roomId) [optional]
+
+// Library Management
+// - library_books -> colleges (collegeId)
+// - library_issues -> library_books (bookId)
+// - library_issues -> students (studentId)
+// - library_issues -> users (issuedBy, returnedTo)
+
+// Infrastructure
 // - labs -> colleges (collegeId)
 // - labs -> departments (departmentId)
-// - labs -> users (labInchargeId) [optional]
+// - labs -> faculty (labInchargeId) [optional]
+// - classrooms -> colleges (collegeId)
+// - exam_halls -> colleges (collegeId)
+
+// Academic Scheduling
+// - timetable -> colleges (collegeId)
+// - timetable -> sections (sectionId)
+// - timetable -> courses (courseId)
+// - timetable -> faculty (facultyId)
+// - timetable -> classrooms (classroomId) [optional]
+
+// Financial
 // - transactions -> colleges (collegeId)
 // - transactions -> students (studentId) [optional]
-// - transactions -> users (processedById) [optional]
+// - transactions -> users (processedById, approvedBy) [optional]
 
 // MongoDB Collections reference PostgreSQL UUIDs:
 // - All MongoDB collections use UUID strings to reference PostgreSQL entities
 // - This creates a loose coupling between the relational and document stores
 // - Referential integrity is maintained at the application level
+// - Analytics, logs, files, notifications, and configurations are stored in MongoDB
+// - Academic calendar and announcements use MongoDB for flexible schema

@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -72,9 +73,9 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
+    <div className="w-full max-w-6xl mx-auto p-4">
       {!showCollegeRegistration ? (
-        /* Login Card */
+        // Login Card
         <Card className="w-full max-w-md mx-auto shadow-lg border-border/50">
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
@@ -166,7 +167,7 @@ export function LoginForm() {
           </CardContent>
         </Card>
       ) : (
-        /* College Registration Card */
+        // College Registration Card
         <CollegeRegistrationForm onBackToLogin={() => setShowCollegeRegistration(false)} />
       )}
     </div>
@@ -174,11 +175,7 @@ export function LoginForm() {
 }
 
 // College Registration Component
-interface CollegeRegistrationFormProps {
-  onBackToLogin: () => void
-}
-
-function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps) {
+function CollegeRegistrationForm({ onBackToLogin }: { onBackToLogin: () => void }) {
   const [formData, setFormData] = useState({
     // Basic College Information
     name: "",
@@ -261,7 +258,7 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
 
       if (data.success) {
         setSuccess("College registered successfully! You can now login with admin credentials.")
-        // Go back to login after successful registration
+        // Optionally redirect to login
         setTimeout(() => {
           onBackToLogin()
         }, 2000)
@@ -328,27 +325,30 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
   }
 
   return (
-    <Card className="w-full shadow-lg border-border/50">
-      <CardHeader className="space-y-1 text-center">
-        <div className="flex items-center justify-center gap-2 relative">
+    <Card className="w-full max-w-5xl mx-auto shadow-lg border-border/50">
+      <CardHeader className="space-y-1">
+        <div className="flex items-center gap-3">
           <Button
+            type="button"
             variant="ghost"
             size="sm"
-            className="absolute left-0"
             onClick={onBackToLogin}
+            className="flex items-center gap-2"
           >
-            <ArrowLeft className="h-4 w-4 mr-1" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Login
           </Button>
-          <CardTitle className="text-2xl font-bold flex items-center gap-2">
-            <Building2 className="h-6 w-6 text-primary" />
-            Register New College
-          </CardTitle>
+          <div className="flex-1 text-center">
+            <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
+              <Building2 className="h-6 w-6 text-primary" />
+              Register New College
+            </CardTitle>
+            <CardDescription>Register your institution to get started with the ERP system</CardDescription>
+          </div>
         </div>
-        <CardDescription>Register your institution to get started with the ERP system</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-8">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800">
               <AlertCircle className="h-4 w-4" />
@@ -365,8 +365,8 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
 
           {/* Basic Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Basic Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="collegeName">College Name *</Label>
                 <Input
@@ -393,8 +393,6 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
                   id="establishedYear"
                   type="number"
                   placeholder="e.g., 1995"
-                  min="1800"
-                  max={new Date().getFullYear()}
                   value={formData.establishedYear}
                   onChange={(e) => setFormData(prev => ({ ...prev, establishedYear: e.target.value }))}
                   required
@@ -411,18 +409,14 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="collegeType">College Type *</Label>
-                <Select
-                  value={formData.collegeType}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, collegeType: value }))}
-                >
+                <Label htmlFor="collegeType">College Type</Label>
+                <Select value={formData.collegeType} onValueChange={(value) => setFormData(prev => ({ ...prev, collegeType: value }))}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select college type" />
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="government">Government</SelectItem>
                     <SelectItem value="private">Private</SelectItem>
-                    <SelectItem value="autonomous">Autonomous</SelectItem>
                     <SelectItem value="aided">Government Aided</SelectItem>
                   </SelectContent>
                 </Select>
@@ -442,8 +436,8 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
 
           {/* Address Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Address Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Address Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="street">Street Address *</Label>
                 <Input
@@ -479,19 +473,18 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
                 <Input
                   id="pincode"
                   placeholder="Enter pincode"
-                  pattern="[0-9]{6}"
                   value={formData.address.pincode}
                   onChange={(e) => updateFormData('address', 'pincode', e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="country">Country *</Label>
+                <Label htmlFor="country">Country</Label>
                 <Input
                   id="country"
+                  placeholder="Enter country"
                   value={formData.address.country}
                   onChange={(e) => updateFormData('address', 'country', e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -499,8 +492,8 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
 
           {/* Contact Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Contact Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="collegePhone">College Phone *</Label>
                 <Input
@@ -543,10 +536,132 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
             </div>
           </div>
 
+          {/* Infrastructure Details */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Infrastructure Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="campusArea">Campus Area (acres)</Label>
+                <Input
+                  id="campusArea"
+                  type="number"
+                  placeholder="Enter campus area"
+                  value={formData.campusArea}
+                  onChange={(e) => setFormData(prev => ({ ...prev, campusArea: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="totalBuildings">Total Buildings</Label>
+                <Input
+                  id="totalBuildings"
+                  type="number"
+                  placeholder="Number of buildings"
+                  value={formData.totalBuildings}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalBuildings: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="totalClassrooms">Total Classrooms</Label>
+                <Input
+                  id="totalClassrooms"
+                  type="number"
+                  placeholder="Number of classrooms"
+                  value={formData.totalClassrooms}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalClassrooms: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="totalLaboratories">Total Laboratories</Label>
+                <Input
+                  id="totalLaboratories"
+                  type="number"
+                  placeholder="Number of labs"
+                  value={formData.totalLaboratories}
+                  onChange={(e) => setFormData(prev => ({ ...prev, totalLaboratories: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Library Details */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Library Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="totalBooks">Total Books</Label>
+                <Input
+                  id="totalBooks"
+                  type="number"
+                  placeholder="Number of books"
+                  value={formData.libraryDetails.totalBooks}
+                  onChange={(e) => updateFormData('libraryDetails', 'totalBooks', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="digitalResources">Digital Resources</Label>
+                <Input
+                  id="digitalResources"
+                  placeholder="Digital resources available"
+                  value={formData.libraryDetails.digitalResources}
+                  onChange={(e) => updateFormData('libraryDetails', 'digitalResources', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="readingCapacity">Reading Capacity</Label>
+                <Input
+                  id="readingCapacity"
+                  type="number"
+                  placeholder="Seating capacity"
+                  value={formData.libraryDetails.readingCapacity}
+                  onChange={(e) => updateFormData('libraryDetails', 'readingCapacity', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Accreditation Information */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Accreditation Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="accreditingBody">Accrediting Body</Label>
+                <Select value={formData.accreditation.accreditingBody} onValueChange={(value) => updateFormData('accreditation', 'accreditingBody', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select accrediting body" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NAAC">NAAC</SelectItem>
+                    <SelectItem value="NBA">NBA</SelectItem>
+                    <SelectItem value="AICTE">AICTE</SelectItem>
+                    <SelectItem value="UGC">UGC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="accreditationGrade">Grade</Label>
+                <Input
+                  id="accreditationGrade"
+                  placeholder="e.g., A++"
+                  value={formData.accreditation.grade}
+                  onChange={(e) => updateFormData('accreditation', 'grade', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="validUntil">Valid Until</Label>
+                <Input
+                  id="validUntil"
+                  type="date"
+                  value={formData.accreditation.validUntil}
+                  onChange={(e) => updateFormData('accreditation', 'validUntil', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Admin Details */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Admin Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Admin Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="adminName">Admin Name *</Label>
                 <Input
@@ -574,7 +689,6 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
                   id="adminPassword"
                   type="password"
                   placeholder="Enter admin password"
-                  minLength={6}
                   value={formData.adminDetails.password}
                   onChange={(e) => updateFormData('adminDetails', 'password', e.target.value)}
                   required
@@ -591,20 +705,17 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="adminDOB">Date of Birth</Label>
+                <Label htmlFor="dateOfBirth">Date of Birth</Label>
                 <Input
-                  id="adminDOB"
+                  id="dateOfBirth"
                   type="date"
                   value={formData.adminDetails.dateOfBirth}
                   onChange={(e) => updateFormData('adminDetails', 'dateOfBirth', e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="adminGender">Gender</Label>
-                <Select
-                  value={formData.adminDetails.gender}
-                  onValueChange={(value) => updateFormData('adminDetails', 'gender', value)}
-                >
+                <Label htmlFor="gender">Gender</Label>
+                <Select value={formData.adminDetails.gender} onValueChange={(value) => updateFormData('adminDetails', 'gender', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
@@ -618,16 +729,27 @@ function CollegeRegistrationForm({ onBackToLogin }: CollegeRegistrationFormProps
             </div>
           </div>
 
-          <div className="flex gap-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="w-full" 
-              onClick={onBackToLogin}
-            >
+          {/* Academic Year */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b pb-2">Academic Settings</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="academicYear">Academic Year</Label>
+                <Input
+                  id="academicYear"
+                  placeholder="e.g., 2024-2025"
+                  value={formData.academicYear}
+                  onChange={(e) => setFormData(prev => ({ ...prev, academicYear: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-4 pt-6">
+            <Button type="button" variant="outline" onClick={onBackToLogin} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="flex-1" disabled={isLoading}>
               {isLoading ? "Registering College..." : "Register College"}
             </Button>
           </div>

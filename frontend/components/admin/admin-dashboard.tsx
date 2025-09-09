@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { AddStudentModal } from "./add-student-modal"
 import { AddFacultyModal } from "./add-faculty-modal"
 import { AddCourseModal } from "./add-course-modal"
 import { AddDepartmentModal } from "./add-department-modal"
+import { useDashboard } from "@/lib/hooks/use-api"
 import {
   Users,
   BookOpen,
@@ -20,6 +21,7 @@ import {
   Plus,
   Settings,
   User,
+  RefreshCw,
 } from "lucide-react"
 
 interface DashboardStats {
@@ -47,37 +49,13 @@ interface DashboardStats {
 }
 
 export function AdminDashboard() {
-  const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  
+  // Use the dashboard hook for data management
+  const { dashboardData, loading: isLoading, error, refetch: fetchDashboardData } = useDashboard()
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
-  const fetchDashboardData = async () => {
-    try {
-      const token = localStorage.getItem("token")
-      const response = await fetch('/api/admin/dashboard', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-
-      const data = await response.json()
-      if (data.success) {
-        setDashboardData(data.data)
-      } else {
-        setError("Failed to load dashboard data")
-      }
-    } catch (error) {
-      console.error('Dashboard fetch error:', error)
-      setError("Network error")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Cast the data to match the expected interface
+  const data = dashboardData as DashboardStats | null
 
   const generateAttendanceReport = async () => {
     try {
@@ -177,6 +155,15 @@ export function AdminDashboard() {
           <p className="text-muted-foreground mt-1">Monitor and manage your institution's operations</p>
         </div>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchDashboardData}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
           <Button variant="outline" size="sm" onClick={generateAttendanceReport}>
             <Download className="h-4 w-4 mr-2" />
             Attendance Report
@@ -200,7 +187,7 @@ export function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.userStats.totalStudents || 0}</div>
+            <div className="text-2xl font-bold">{data?.userStats.totalStudents || 0}</div>
             <p className="text-xs text-muted-foreground">Active enrolled students</p>
           </CardContent>
         </Card>
@@ -211,7 +198,7 @@ export function AdminDashboard() {
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.userStats.totalFaculty || 0}</div>
+            <div className="text-2xl font-bold">{data?.userStats.totalFaculty || 0}</div>
             <p className="text-xs text-muted-foreground">Teaching staff members</p>
           </CardContent>
         </Card>
@@ -222,7 +209,7 @@ export function AdminDashboard() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.courseStats.totalCourses || 0}</div>
+            <div className="text-2xl font-bold">{data?.courseStats.totalCourses || 0}</div>
             <p className="text-xs text-muted-foreground">Available courses</p>
           </CardContent>
         </Card>
@@ -233,7 +220,7 @@ export function AdminDashboard() {
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardData?.departmentStats.totalDepartments || 0}</div>
+            <div className="text-2xl font-bold">{data?.departmentStats.totalDepartments || 0}</div>
             <p className="text-xs text-muted-foreground">Academic departments</p>
           </CardContent>
         </Card>
@@ -287,33 +274,33 @@ export function AdminDashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Students</span>
                       <span className="text-sm text-muted-foreground">
-                        {dashboardData?.userStats.totalStudents || 0}
+                        {data?.userStats.totalStudents || 0}
                       </span>
                     </div>
                     <Progress 
-                      value={(dashboardData?.userStats.totalStudents || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
+                      value={(data?.userStats.totalStudents || 0) / (data?.userStats.totalUsers || 1) * 100} 
                       className="h-2"
                     />
                     
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Faculty</span>
                       <span className="text-sm text-muted-foreground">
-                        {dashboardData?.userStats.totalFaculty || 0}
+                        {data?.userStats.totalFaculty || 0}
                       </span>
                     </div>
                     <Progress 
-                      value={(dashboardData?.userStats.totalFaculty || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
+                      value={(data?.userStats.totalFaculty || 0) / (data?.userStats.totalUsers || 1) * 100} 
                       className="h-2"
                     />
                     
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Admin</span>
                       <span className="text-sm text-muted-foreground">
-                        {dashboardData?.userStats.totalAdmin || 0}
+                        {data?.userStats.totalAdmin || 0}
                       </span>
                     </div>
                     <Progress 
-                      value={(dashboardData?.userStats.totalAdmin || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
+                      value={(data?.userStats.totalAdmin || 0) / (data?.userStats.totalUsers || 1) * 100} 
                       className="h-2"
                     />
                   </div>
@@ -349,7 +336,7 @@ export function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {dashboardData?.recentUsers.map((user) => (
+                {data?.recentUsers.map((user: any) => (
                   <div key={user._id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -382,9 +369,9 @@ export function AdminDashboard() {
               <CardDescription>Available academic departments</CardDescription>
             </CardHeader>
             <CardContent>
-              {dashboardData?.departmentStats.departments && dashboardData.departmentStats.departments.length > 0 ? (
+              {data?.departmentStats.departments && data.departmentStats.departments.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {dashboardData.departmentStats.departments.map((dept, index) => (
+                  {data.departmentStats.departments.map((dept: any, index: number) => (
                     <Card key={index}>
                       <CardContent className="pt-6">
                         <div className="flex items-center gap-2">

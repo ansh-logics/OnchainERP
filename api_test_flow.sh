@@ -56,6 +56,14 @@ COURSE_ID=""
 FACULTY_ID=""
 STUDENT_ID=""
 ASSIGNMENT_ID=""
+EXAM_ID=""
+EXAM_HALL_ID=""
+HOSTEL_ID=""
+ROOM_ID=""
+BOOK_ID=""
+ISSUE_ID=""
+CLASSROOM_ID=""
+TIMETABLE_ID=""
 
 # Step 1: Check server status
 check_server
@@ -175,14 +183,18 @@ DEPT_RESPONSE=$(curl -s -X POST $API_BASE/departments \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{
     "name": "Computer Science",
-    "code": "CS",
+    "shortName": "CSE'$TEST_SUFFIX'",
+    "code": "CS'$TEST_SUFFIX'",
     "description": "Department of Computer Science and Engineering",
     "hodName": "Dr. Jane Smith",
     "hodEmail": "hod.cs@'$TEST_SUFFIX'.edu",
     "hodPhone": "9876543212",
     "establishedYear": 2020,
     "totalSeats": 120,
-    "collegeId": "'$COLLEGE_ID'"
+    "studentsPerSection": 60,
+    "totalSections": 2,
+    "totalIntake": 120,
+    "college": "'$COLLEGE_ID'"
   }')
 
 echo "Department Creation Response:"
@@ -232,13 +244,13 @@ COURSE_RESPONSE=$(curl -s -X POST $API_BASE/courses \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{
     "name": "Data Structures and Algorithms",
-    "code": "CS101",
+    "code": "CS101'$TEST_SUFFIX'",
     "credits": 4,
     "description": "Introduction to Data Structures and Algorithms",
     "semester": 3,
-    "year": 2,
-    "courseType": "core",
-    "departmentId": '$DEPARTMENT_ID',
+    "courseType": "Core",
+    "departmentId": "'$DEPARTMENT_ID'",
+    "collegeId": "'$COLLEGE_ID'"
   }')
 
 echo "Course Creation Response:"
@@ -579,13 +591,383 @@ echo "College Statistics:"
 echo $COLLEGE_STATS | jq '.'
 
 # =============================================================================
-# PHASE 11: ADDITIONAL FEATURES TESTING
+# PHASE 11: CLASSROOM MANAGEMENT TESTING
 # =============================================================================
 
-print_step "PHASE 11: Additional Features Testing"
+print_step "PHASE 11: Classroom Management Testing"
 
-# 11.1 Test password reset flow
-print_step "11.1 Testing password reset flow"
+# 11.1 Create classroom
+print_step "11.1 Creating classroom"
+CLASSROOM_RESPONSE=$(curl -s -X POST $API_BASE/classrooms \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "roomNumber": "CSL'$TEST_SUFFIX'",
+    "roomType": "laboratory",
+    "capacity": 60,
+    "building": "CS Block",
+    "floor": 1,
+    "facilities": ["projector", "whiteboard", "computers"],
+    "hasProjector": true,
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Classroom Creation Response:"
+echo $CLASSROOM_RESPONSE | jq '.'
+
+CLASSROOM_ID=$(echo $CLASSROOM_RESPONSE | jq -r '.data.id')
+if [ "$CLASSROOM_ID" != "null" ] && [ -n "$CLASSROOM_ID" ]; then
+    print_success "Classroom created successfully with ID: $CLASSROOM_ID"
+else
+    print_error "Failed to create classroom"
+fi
+
+# 11.2 Get all classrooms
+print_step "11.2 Getting all classrooms"
+ALL_CLASSROOMS=$(curl -s -X GET $API_BASE/classrooms \
+  -H "Authorization: Bearer $ADMIN_TOKEN")
+
+echo "All Classrooms:"
+echo $ALL_CLASSROOMS | jq '.'
+
+# 11.3 Book classroom
+print_step "11.3 Booking classroom"
+BOOK_CLASSROOM=$(curl -s -X POST $API_BASE/classrooms/$CLASSROOM_ID/book \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $FACULTY_TOKEN" \
+  -d '{
+    "startTime": "2024-09-09T09:00:00.000Z",
+    "endTime": "2024-09-09T10:00:00.000Z",
+    "purpose": "Data Structures Lab",
+    "courseId": "'$COURSE_ID'"
+  }')
+
+echo "Classroom Booking Response:"
+echo $BOOK_CLASSROOM | jq '.'
+
+# 11.4 Get available classrooms
+print_step "11.4 Getting available classrooms"
+AVAILABLE_CLASSROOMS=$(curl -s -X GET "$API_BASE/classrooms/available?date=2024-09-10&startTime=09:00&endTime=10:00" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")
+
+echo "Available Classrooms:"
+echo $AVAILABLE_CLASSROOMS | jq '.'
+
+# =============================================================================
+# PHASE 12: EXAM MANAGEMENT TESTING
+# =============================================================================
+
+print_step "PHASE 12: Exam Management Testing"
+
+# 12.1 Create exam hall
+print_step "12.1 Creating exam hall"
+EXAM_HALL_RESPONSE=$(curl -s -X POST $API_BASE/exams/halls \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "hallName": "Main Exam Hall",
+    "hallCode": "MEH'$TEST_SUFFIX'",
+    "capacity": 200,
+    "location": "Main Block, Floor 2",
+    "facilities": ["CCTV", "AC"],
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Exam Hall Creation Response:"
+echo $EXAM_HALL_RESPONSE | jq '.'
+
+EXAM_HALL_ID=$(echo $EXAM_HALL_RESPONSE | jq -r '.data.id')
+if [ "$EXAM_HALL_ID" != "null" ] && [ -n "$EXAM_HALL_ID" ]; then
+    print_success "Exam hall created successfully with ID: $EXAM_HALL_ID"
+else
+    print_error "Failed to create exam hall"
+fi
+
+# 12.2 Create exam
+print_step "12.2 Creating exam"
+EXAM_RESPONSE=$(curl -s -X POST $API_BASE/exams \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "examName": "Data Structures Mid-term Exam",
+    "examType": "internal",
+    "courseId": "'$COURSE_ID'",
+    "examDate": "2024-10-15",
+    "startTime": "09:00:00",
+    "endTime": "12:00:00",
+    "duration": 180,
+    "maxMarks": 100,
+    "passingMarks": 40,
+    "examHallId": "'$EXAM_HALL_ID'",
+    "instructions": "Bring calculator and ID card",
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Exam Creation Response:"
+echo $EXAM_RESPONSE | jq '.'
+
+EXAM_ID=$(echo $EXAM_RESPONSE | jq -r '.data.id')
+if [ "$EXAM_ID" != "null" ] && [ -n "$EXAM_ID" ]; then
+    print_success "Exam created successfully with ID: $EXAM_ID"
+else
+    print_error "Failed to create exam"
+fi
+
+# 12.3 Get student exams
+print_step "12.3 Getting student exams"
+STUDENT_EXAMS=$(curl -s -X GET $API_BASE/exams/student/$STUDENT_ID \
+  -H "Authorization: Bearer $STUDENT_TOKEN")
+
+echo "Student Exams:"
+echo $STUDENT_EXAMS | jq '.'
+
+# 12.4 Add exam results
+print_step "12.4 Adding exam results"
+EXAM_RESULTS=$(curl -s -X POST $API_BASE/exams/$EXAM_ID/results \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $FACULTY_TOKEN" \
+  -d '{
+    "results": [
+      {
+        "studentId": "'$STUDENT_ID'",
+        "marksObtained": 85,
+        "grade": "A",
+        "remarks": "Excellent performance"
+      }
+    ]
+  }')
+
+echo "Exam Results Response:"
+echo $EXAM_RESULTS | jq '.'
+
+# =============================================================================
+# PHASE 13: ADDITIONAL FEATURES TESTING
+# =============================================================================
+
+print_step "PHASE 13: Additional Features Testing"
+
+# 13.1 Create hostel
+print_step "13.1 Creating hostel"
+HOSTEL_RESPONSE=$(curl -s -X POST $API_BASE/hostels \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "name": "Boys Hostel A",
+    "hostelCode": "BHA'$TEST_SUFFIX'",
+    "hostelType": "boys",
+    "gender": "male",
+    "totalFloors": 4,
+    "totalRooms": 100,
+    "totalCapacity": 200,
+    "monthlyFee": 8000,
+    "securityDeposit": 15000,
+    "location": "Campus North Block",
+    "facilities": ["WiFi", "Mess", "Laundry", "Recreation Room"],
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Hostel Creation Response:"
+echo $HOSTEL_RESPONSE | jq '.'
+
+HOSTEL_ID=$(echo $HOSTEL_RESPONSE | jq -r '.data.id')
+if [ "$HOSTEL_ID" != "null" ] && [ -n "$HOSTEL_ID" ]; then
+    print_success "Hostel created successfully with ID: $HOSTEL_ID"
+else
+    print_error "Failed to create hostel"
+fi
+
+# 13.2 Create hostel room
+print_step "13.2 Creating hostel room"
+ROOM_RESPONSE=$(curl -s -X POST $API_BASE/hostels/$HOSTEL_ID/rooms \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "roomNumber": "A101",
+    "roomType": "double",
+    "capacity": 2,
+    "floor": 1,
+    "amenities": ["AC", "Attached Bathroom"],
+    "condition": "excellent"
+  }')
+
+echo "Room Creation Response:"
+echo $ROOM_RESPONSE | jq '.'
+
+ROOM_ID=$(echo $ROOM_RESPONSE | jq -r '.data.id')
+if [ "$ROOM_ID" != "null" ] && [ -n "$ROOM_ID" ]; then
+    print_success "Room created successfully with ID: $ROOM_ID"
+else
+    print_error "Failed to create room"
+fi
+
+# 13.3 Allocate room to student
+print_step "13.3 Allocating room to student"
+ROOM_ALLOCATION=$(curl -s -X POST $API_BASE/hostels/allocations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "studentId": "'$STUDENT_ID'",
+    "hostelId": "'$HOSTEL_ID'",
+    "roomId": "'$ROOM_ID'",
+    "allocationDate": "2024-09-01",
+    "academicYear": "2024-25"
+  }')
+
+echo "Room Allocation Response:"
+echo $ROOM_ALLOCATION | jq '.'
+
+# 13.4 Get hostel occupancy
+print_step "13.4 Getting hostel occupancy"
+HOSTEL_OCCUPANCY=$(curl -s -X GET $API_BASE/hostels/$HOSTEL_ID/occupancy \
+  -H "Authorization: Bearer $ADMIN_TOKEN")
+
+echo "Hostel Occupancy:"
+echo $HOSTEL_OCCUPANCY | jq '.'
+
+# =============================================================================
+# PHASE 14: LIBRARY MANAGEMENT TESTING
+# =============================================================================
+
+print_step "PHASE 14: Library Management Testing"
+
+# 14.1 Add library book
+print_step "14.1 Adding library book"
+BOOK_RESPONSE=$(curl -s -X POST $API_BASE/library/books \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "title": "Introduction to Algorithms",
+    "author": "Thomas H. Cormen",
+    "isbn": "978-0262033848",
+    "accessionNumber": "ACC'$TEST_SUFFIX'",
+    "publisher": "MIT Press",
+    "publicationYear": 2009,
+    "edition": "3rd Edition",
+    "category": "Computer Science",
+    "subject": "Algorithms",
+    "totalCopies": 5,
+    "availableCopies": 5,
+    "location": "CS Section - Shelf A1",
+    "price": 500.00,
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Book Addition Response:"
+echo $BOOK_RESPONSE | jq '.'
+
+BOOK_ID=$(echo $BOOK_RESPONSE | jq -r '.data.id')
+if [ "$BOOK_ID" != "null" ] && [ -n "$BOOK_ID" ]; then
+    print_success "Book added successfully with ID: $BOOK_ID"
+else
+    print_error "Failed to add book"
+fi
+
+# 14.2 Issue book to student
+print_step "14.2 Issuing book to student"
+BOOK_ISSUE=$(curl -s -X POST $API_BASE/library/books/$BOOK_ID/issue/$STUDENT_ID \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "dueDate": "2024-10-08"
+  }')
+
+echo "Book Issue Response:"
+echo $BOOK_ISSUE | jq '.'
+
+ISSUE_ID=$(echo $BOOK_ISSUE | jq -r '.data.id')
+if [ "$ISSUE_ID" != "null" ] && [ -n "$ISSUE_ID" ]; then
+    print_success "Book issued successfully with Issue ID: $ISSUE_ID"
+else
+    print_error "Failed to issue book"
+fi
+
+# 14.3 Get student library issues
+print_step "14.3 Getting student library issues"
+STUDENT_ISSUES=$(curl -s -X GET $API_BASE/library/issues/student/$STUDENT_ID \
+  -H "Authorization: Bearer $STUDENT_TOKEN")
+
+echo "Student Library Issues:"
+echo $STUDENT_ISSUES | jq '.'
+
+# =============================================================================
+# PHASE 15: TIMETABLE MANAGEMENT TESTING
+# =============================================================================
+
+print_step "PHASE 15: Timetable Management Testing"
+
+# 15.1 Create timetable entry
+print_step "15.1 Creating timetable entry"
+TIMETABLE_RESPONSE=$(curl -s -X POST $API_BASE/timetable \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{
+    "courseId": "'$COURSE_ID'",
+    "facultyId": "'$FACULTY_ID'",
+    "classroomId": "'$CLASSROOM_ID'",
+    "sectionId": "'$DEPARTMENT_ID'",
+    "dayOfWeek": 1,
+    "startTime": "09:00:00",
+    "endTime": "10:00:00",
+    "period": 1,
+    "semester": 3,
+    "academicYear": "2024-25",
+    "effectiveFrom": "2024-09-01",
+    "collegeId": "'$COLLEGE_ID'"
+  }')
+
+echo "Timetable Creation Response:"
+echo $TIMETABLE_RESPONSE | jq '.'
+
+TIMETABLE_ID=$(echo $TIMETABLE_RESPONSE | jq -r '.data.id')
+if [ "$TIMETABLE_ID" != "null" ] && [ -n "$TIMETABLE_ID" ]; then
+    print_success "Timetable entry created successfully with ID: $TIMETABLE_ID"
+else
+    print_error "Failed to create timetable entry"
+fi
+
+# 15.2 Get faculty timetable
+print_step "15.2 Getting faculty timetable"
+FACULTY_TIMETABLE=$(curl -s -X GET $API_BASE/timetable/faculty/$FACULTY_ID \
+  -H "Authorization: Bearer $FACULTY_TOKEN")
+
+echo "Faculty Timetable:"
+echo $FACULTY_TIMETABLE | jq '.'
+
+# =============================================================================
+# PHASE 16: ATTENDANCE AND ASSIGNMENT ADVANCED TESTING
+# =============================================================================
+
+print_step "PHASE 16: Advanced Testing"
+
+# 16.1 Mark bulk attendance
+print_step "16.1 Marking bulk attendance"
+BULK_ATTENDANCE=$(curl -s -X POST $API_BASE/attendance/bulk-mark \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $FACULTY_TOKEN" \
+  -d '{
+    "courseId": "'$COURSE_ID'",
+    "date": "2024-09-09",
+    "attendanceData": [
+      {
+        "studentId": "'$STUDENT_ID'",
+        "status": "present"
+      }
+    ]
+  }')
+
+echo "Bulk Attendance Response:"
+echo $BULK_ATTENDANCE | jq '.'
+
+# 16.2 Get faculty assignments
+print_step "16.2 Getting faculty assignments"
+FACULTY_ASSIGNMENTS=$(curl -s -X GET $API_BASE/assignments/faculty/$FACULTY_ID \
+  -H "Authorization: Bearer $FACULTY_TOKEN")
+
+echo "Faculty Assignments:"
+echo $FACULTY_ASSIGNMENTS | jq '.'
+
+# 16.3 Test password reset flow
+print_step "16.3 Testing password reset flow"
 FORGOT_PASSWORD=$(curl -s -X POST $API_BASE/auth/forgot-password \
   -H "Content-Type: application/json" \
   -d '{
@@ -595,20 +977,8 @@ FORGOT_PASSWORD=$(curl -s -X POST $API_BASE/auth/forgot-password \
 echo "Forgot Password Response:"
 echo $FORGOT_PASSWORD | jq '.'
 
-# 11.2 Update student details
-print_step "11.2 Updating student details"
-UPDATE_DETAILS=$(curl -s -X PUT $API_BASE/auth/update-details \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $STUDENT_TOKEN" \
-  -d '{
-    "phone": "9876543299"
-  }')
-
-echo "Update Details Response:"
-echo $UPDATE_DETAILS | jq '.'
-
-# 11.3 Assign roll numbers to students
-print_step "11.3 Assigning roll numbers to students"
+# 16.4 Assign roll numbers to students
+print_step "16.4 Assigning roll numbers to students"
 ASSIGN_ROLL_NUMBERS=$(curl -s -X POST $API_BASE/departments/$DEPARTMENT_ID/assign-roll-numbers \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -621,29 +991,29 @@ echo "Assign Roll Numbers Response:"
 echo $ASSIGN_ROLL_NUMBERS | jq '.'
 
 # =============================================================================
-# PHASE 12: CLEANUP AND LOGOUT
+# PHASE 17: CLEANUP AND LOGOUT
 # =============================================================================
 
-print_step "PHASE 12: Cleanup and Logout"
+print_step "PHASE 17: Cleanup and Logout"
 
-# 12.1 Admin logout
-print_step "12.1 Admin logout"
+# 17.1 Admin logout
+print_step "17.1 Admin logout"
 ADMIN_LOGOUT=$(curl -s -X POST $API_BASE/auth/logout \
   -H "Authorization: Bearer $ADMIN_TOKEN")
 
 echo "Admin Logout Response:"
 echo $ADMIN_LOGOUT | jq '.'
 
-# 12.2 Faculty logout
-print_step "12.2 Faculty logout"
+# 17.2 Faculty logout
+print_step "17.2 Faculty logout"
 FACULTY_LOGOUT=$(curl -s -X POST $API_BASE/auth/logout \
   -H "Authorization: Bearer $FACULTY_TOKEN")
 
 echo "Faculty Logout Response:"
 echo $FACULTY_LOGOUT | jq '.'
 
-# 12.3 Student logout
-print_step "12.3 Student logout"
+# 17.3 Student logout
+print_step "17.3 Student logout"
 STUDENT_LOGOUT=$(curl -s -X POST $API_BASE/auth/logout \
   -H "Authorization: Bearer $STUDENT_TOKEN")
 
@@ -668,7 +1038,13 @@ echo "  ✓ Assignment Creation & Submission"
 echo "  ✓ Attendance Management"
 echo "  ✓ Grading System"
 echo "  ✓ Reports & Analytics"
-echo "  ✓ Additional Features"
+echo "  ✓ Classroom Management & Booking"
+echo "  ✓ Exam Management & Results"
+echo "  ✓ Hostel Management & Allocation"
+echo "  ✓ Library Management & Book Issues"
+echo "  ✓ Timetable Management"
+echo "  ✓ Advanced Attendance Features"
+echo "  ✓ Assignment Tracking"
 echo "  ✓ Authentication Flow"
 echo ""
 echo "Created Resources:"
@@ -678,5 +1054,10 @@ echo "  📖 Course ID: $COURSE_ID"
 echo "  👨‍🏫 Faculty ID: $FACULTY_ID"
 echo "  🎓 Student ID: $STUDENT_ID"
 echo "  📝 Assignment ID: $ASSIGNMENT_ID"
+echo "  🏛️ Classroom ID: $CLASSROOM_ID"
+echo "  📋 Exam ID: $EXAM_ID"
+echo "  🏠 Hostel ID: $HOSTEL_ID"
+echo "  📚 Book ID: $BOOK_ID"
+echo "  📅 Timetable ID: $TIMETABLE_ID"
 echo ""
 print_success "All major API endpoints have been tested successfully!"

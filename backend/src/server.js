@@ -53,6 +53,15 @@ app.use('/api/departments', require('./routes/departmentRoutes'));
 app.use('/api/labs', require('./routes/labRoutes'));
 app.use('/api/finance', require('./routes/financeRoutes'));
 
+// New ERP module routes
+app.use('/api/hostels', require('./routes/hostelRoutes'));
+app.use('/api/attendance', require('./routes/attendanceRoutes'));
+app.use('/api/assignments', require('./routes/assignmentRoutes'));
+app.use('/api/exams', require('./routes/examRoutes'));
+app.use('/api/library', require('./routes/libraryRoutes'));
+app.use('/api/timetable', require('./routes/timetableRoutes'));
+app.use('/api/classrooms', require('./routes/classroomRoutes'));
+
 // Health check route
 app.get('/health', (req, res) => {
   res.status(200).json({ 
