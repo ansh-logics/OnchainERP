@@ -16,7 +16,9 @@ class LoggingService {
         url: options.url,
         data,
         duration: options.duration,
-        status: options.status || 'success'
+        status: options.status || 'success',
+        // Add this line to capture error details
+        error: options.error
       });
 
       await logEntry.save();

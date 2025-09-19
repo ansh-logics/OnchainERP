@@ -23,9 +23,8 @@ const SystemLogSchema = new mongoose.Schema(
     // User context
     userId: {
       type: String, // UUID from PostgreSQL
-      required: function() {
-        return this.action !== 'system';
-      }
+      required: false,
+      nullable:true,
     },
     userRole: {
       type: String,

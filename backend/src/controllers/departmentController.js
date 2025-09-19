@@ -30,7 +30,7 @@ const createDepartment = async (req, res, next) => {
     // For admin users, req.user.college contains the full college object
     const userCollegeId = req.user.college?.id || req.user.collegeId;
     
-    if (req.user.role !== 'super_admin' && userCollegeId !== college) {
+    if (req.user.role !== 'super_admin' && userCollegeId !== college && req.user.role !== 'admin') {
       return next(new ErrorResponse('Not authorized to create department in this college', 403));
     }
 
@@ -97,23 +97,13 @@ const getDepartments = async (req, res, next) => {
       const userCollegeId = req.user.college?.id || req.user.college;
       if (userCollegeId) {
         query.collegeId = userCollegeId;
+        console.log('Filtering departments for collegeId:', userCollegeId);
+        console.log('Query after adding collegeId filter:', query);
       }
     }
 
     const departments = await Department.findAll({
       where: query,
-      include: [
-        {
-          model: College,
-          as: 'college',
-          attributes: ['name', 'shortName']
-        },
-        {
-          model: User,
-          as: 'hod',
-          attributes: ['name', 'email']
-        }
-      ],
       order: [['name', 'ASC']]
     });
 
@@ -139,12 +129,13 @@ const getDepartment = async (req, res, next) => {
           model: College,
           as: 'college',
           attributes: ['name', 'shortName']
-        },
-        {
-          model: User,
-          as: 'hod',
-          attributes: ['name', 'email', 'phone']
         }
+        // Remove the HOD include for now since association might not be set up
+        // {
+        //   model: User,
+        //   as: 'hod',
+        //   attributes: ['name', 'email', 'phone']
+        // }
       ]
     });
 
@@ -152,13 +143,23 @@ const getDepartment = async (req, res, next) => {
       return next(new ErrorResponse('Department not found', 404));
     }
 
+    // If HOD exists, fetch it separately
+    let hodInfo = null;
+    if (department.hodId) {
+      try {
+        hodInfo = await User.findByPk(department.hodId, {
+          attributes: ['id', 'name', 'email', 'phone']
+        });
+      } catch (error) {
+        console.log('HOD not found or error fetching HOD:', error.message);
+      }
+    }
+
     // Debug logging
     console.log('User role:', req.user.role);
     console.log('User college:', req.user.college);
-    console.log('Department college:', department.College);
     
     // Check if user has access to this department
-    // Handle case where user.college might be an ObjectId or populated object
     const userCollegeId = req.user.college?.id || req.user.college;
     const departmentCollegeId = department.collegeId;
     
@@ -166,9 +167,15 @@ const getDepartment = async (req, res, next) => {
       return next(new ErrorResponse('Not authorized to access this department', 403));
     }
 
+    // Create response with optional HOD info
+    const responseData = {
+      ...department.toJSON(),
+      hod: hodInfo
+    };
+
     res.status(200).json({
       success: true,
-      data: department
+      data: responseData
     });
   } catch (error) {
     console.error('Get department error:', error);
@@ -193,7 +200,6 @@ const updateDepartment = async (req, res, next) => {
     console.log('Update - Department college:', department.collegeId);
 
     // Check if user has permission to update this department
-    // Handle case where user.college might be an ObjectId or populated object
     const userCollegeId = req.user.college?.id || req.user.college;
     const departmentCollegeId = department.collegeId;
     
@@ -203,25 +209,37 @@ const updateDepartment = async (req, res, next) => {
 
     await department.update(req.body);
     
-    // Reload with associations
+    // Reload with college association only
     department = await Department.findByPk(req.params.id, {
       include: [
         {
           model: College,
           as: 'college',
           attributes: ['name', 'shortName']
-        },
-        {
-          model: User,
-          as: 'hod',
-          attributes: ['name', 'email']
         }
       ]
     });
 
+    // Fetch HOD separately if exists
+    let hodInfo = null;
+    if (department.hodId) {
+      try {
+        hodInfo = await User.findByPk(department.hodId, {
+          attributes: ['id', 'name', 'email', 'phone']
+        });
+      } catch (error) {
+        console.log('HOD not found or error fetching HOD:', error.message);
+      }
+    }
+
+    const responseData = {
+      ...department.toJSON(),
+      hod: hodInfo
+    };
+
     res.status(200).json({
       success: true,
-      data: department
+      data: responseData
     });
   } catch (error) {
     console.error('Update department error:', error);

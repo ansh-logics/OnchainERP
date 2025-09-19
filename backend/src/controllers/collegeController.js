@@ -176,7 +176,7 @@ const registerCollege = async (req, res, next) => {
 
   } catch (error) {
     await LoggingService.logError('college_management', 'register_college', null, error);
-    
+
     if (error.name === 'SequelizeUniqueConstraintError') {
       return next(new ErrorResponse('College with this information already exists', 400));
     }
