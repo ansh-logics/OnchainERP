@@ -91,4 +91,9 @@ const LibraryBook = sequelize.define('LibraryBook', {
   ]
 });
 
+// This should be accessible at /exams for staff
+export default function StaffExamsPage() {
+  return <div>Staff Exams</div>;
+}
+
 module.exports = LibraryBook;
