@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import { getCurrentUser } from "@/lib/auth";
 import { ViewProfileModal, EditUserModal, SuspendUserModal } from "@/components/admin/user-modals";
 import { 
@@ -30,15 +30,29 @@ import {
   Unlock
 } from "lucide-react";
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  department: string;
+  designation: string;
+  joinDate: string;
+  status: string;
+  lastLogin: string;
+  permissions: string[];
+}
+
 export default function AdminUsersPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTab, setSelectedTab] = useState("all");
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [suspendModalOpen, setSuspendModalOpen] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const router = useRouter();
 
   // Initialize mock users data
@@ -119,7 +133,7 @@ export default function AdminUsersPage() {
       }
     ];
     setUsers(initialUsers);
-  }, []);
+  }, [router]);
 
   // Early return if user is not loaded or not admin
   if (!user) {
@@ -162,22 +176,22 @@ export default function AdminUsersPage() {
   };
 
   // Handler functions for modals
-  const handleViewProfile = (userData: any) => {
+  const handleViewProfile = (userData: User) => {
     setSelectedUser(userData);
     setViewModalOpen(true);
   };
 
-  const handleEditUser = (userData: any) => {
+  const handleEditUser = (userData: User) => {
     setSelectedUser(userData);
     setEditModalOpen(true);
   };
 
-  const handleSuspendUser = (userData: any) => {
+  const handleSuspendUser = (userData: User) => {
     setSelectedUser(userData);
     setSuspendModalOpen(true);
   };
 
-  const handleSaveUser = (updatedData: any) => {
+  const handleSaveUser = (updatedData: User) => {
     setUsers(prevUsers => 
       prevUsers.map(u => u.id === updatedData.id ? updatedData : u)
     );
@@ -215,9 +229,9 @@ export default function AdminUsersPage() {
     document.body.removeChild(link);
   };
 
-  const filteredUsers = users.filter((usr: any) => 
+  const filteredUsers = users.filter((usr: User) => 
     selectedTab === 'all' ? true : usr.role === selectedTab
-  ).filter((usr: any) => 
+  ).filter((usr: User) => 
     usr.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usr.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     usr.department.toLowerCase().includes(searchTerm.toLowerCase())
@@ -225,12 +239,12 @@ export default function AdminUsersPage() {
 
   const userStats = {
     total: users.length,
-    active: users.filter((usr: any) => usr.status === 'active').length,
-    inactive: users.filter((usr: any) => usr.status === 'inactive').length,
-    admin: users.filter((usr: any) => usr.role === 'admin').length,
-    faculty: users.filter((usr: any) => usr.role === 'faculty').length,
-    staff: users.filter((usr: any) => usr.role === 'staff').length,
-    student: users.filter((usr: any) => usr.role === 'student').length,
+    active: users.filter((usr: User) => usr.status === 'active').length,
+    inactive: users.filter((usr: User) => usr.status === 'inactive').length,
+    admin: users.filter((usr: User) => usr.role === 'admin').length,
+    faculty: users.filter((usr: User) => usr.role === 'faculty').length,
+    staff: users.filter((usr: User) => usr.role === 'staff').length,
+    student: users.filter((usr: User) => usr.role === 'student').length,
   };
 
   return (
@@ -450,7 +464,7 @@ export default function AdminUsersPage() {
                     <Shield className="h-5 w-5" />
                     <h3 className="font-semibold capitalize">{role}</h3>
                     <Badge className={getRoleColor(role)} variant="outline">
-                      {users.filter((usr: any) => usr.role === role).length}
+                      {users.filter((usr: User) => usr.role === role).length}
                     </Badge>
                   </div>
                   <div className="space-y-2">

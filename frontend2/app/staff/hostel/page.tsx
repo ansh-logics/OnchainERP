@@ -9,20 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/auth";
-import { mockHostelRooms } from "@/lib/mock-data";
+
 import { 
   Search,
-  Building, 
   Users, 
-  Home, 
   UserPlus, 
   UserMinus,
+  Building, 
+  Home,
   Eye,
   Filter,
   Download,
-  Bed,
-  Wifi,
-  Car,
   CheckCircle,
   AlertTriangle
 } from "lucide-react";

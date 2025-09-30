@@ -393,7 +393,7 @@ export function PaymentModal({ isOpen, onClose, feeRecord, onPaymentSuccess }: P
             </Card>
 
             {/* Payment Methods */}
-            <Tabs value={selectedMethod} onValueChange={(value: any) => setSelectedMethod(value)}>
+            <Tabs value={selectedMethod} onValueChange={(value: string) => setSelectedMethod(value)}>
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="card" className="text-xs">
                   <CreditCard className="h-4 w-4" />

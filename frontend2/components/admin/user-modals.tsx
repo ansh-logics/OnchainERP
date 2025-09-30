@@ -16,8 +16,7 @@ import {
   Building,
   Shield,
   Clock,
-  CheckCircle,
-  X
+  CheckCircle
 } from "lucide-react";
 
 interface UserData {

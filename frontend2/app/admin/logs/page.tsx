@@ -15,8 +15,6 @@ import {
   Shield,
   User,
   Database,
-  Lock,
-  Unlock,
   AlertTriangle,
   CheckCircle,
   Eye,
@@ -30,15 +28,14 @@ import {
   LogIn,
   LogOut,
   UserPlus,
-  Edit,
-  Trash2
+  Edit
 } from "lucide-react";
 
 export default function AdminLogsPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTab, setSelectedTab] = useState("all");
-  const [selectedTimeframe, setSelectedTimeframe] = useState("today");
+
   const [realTimeModalOpen, setRealTimeModalOpen] = useState(false);
   const router = useRouter();
 
@@ -68,7 +65,23 @@ export default function AdminLogsPage() {
     document.body.removeChild(link);
   };
 
-  const handleViewDetails = (log: any) => {
+  interface LogEntry {
+    id: string;
+    timestamp: string;
+    user: string;
+    userRole: string;
+    action: string;
+    description: string;
+    category: string;
+    severity: string;
+    ipAddress: string;
+    userAgent: string;
+    details: Record<string, string | number | boolean | undefined>;
+    resolved?: boolean;
+    assignedTo?: string;
+  }
+
+  const handleViewDetails = (log: LogEntry) => {
     const detailsWindow = window.open('', '_blank', 'width=800,height=600');
     if (!detailsWindow) return;
 
@@ -362,7 +375,7 @@ export default function AdminLogsPage() {
                 <Activity className="h-5 w-5 text-blue-600" />
                 <div>
                   <div className="text-xl font-bold">{logMetrics.todayLogs}</div>
-                  <p className="text-sm text-gray-600">Today's Events</p>
+                  <p className="text-sm text-gray-600">Today&apos;s Events</p>
                 </div>
               </div>
             </CardContent>

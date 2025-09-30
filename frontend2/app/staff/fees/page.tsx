@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/auth";
-import { mockFeeRecords } from "@/lib/mock-data";
+
 import { 
   Search,
   DollarSign, 
@@ -381,7 +381,7 @@ export default function StaffFeesPage() {
             {/* Quick Stats */}
             <Card className="mt-6">
               <CardHeader>
-                <CardTitle>Today's Summary</CardTitle>
+                <CardTitle>Today&apos;s Summary</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">

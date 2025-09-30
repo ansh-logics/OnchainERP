@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { 
   Activity,
   Pause,
@@ -12,9 +12,7 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
-  X,
   Download,
-  Eye,
   Clock,
   User
 } from "lucide-react";
@@ -26,7 +24,17 @@ interface RealTimeMonitorProps {
 
 export function RealTimeMonitor({ isOpen, onClose }: RealTimeMonitorProps) {
   const [isMonitoring, setIsMonitoring] = useState(true);
-  const [logs, setLogs] = useState<any[]>([]);
+  interface LogEntry {
+    id: number;
+    timestamp: string;
+    user: string;
+    action: string;
+    severity: 'info' | 'warning' | 'critical' | string;
+    category: string;
+    description: string;
+  }
+
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState({
     totalEvents: 0,
     criticalEvents: 0,
@@ -44,6 +52,7 @@ export function RealTimeMonitor({ isOpen, onClose }: RealTimeMonitorProps) {
         timestamp: new Date().toLocaleTimeString(),
         user: ['admin@college.edu', 'system', 'priya.sharma@college.edu', 'rajesh.kumar@college.edu'][Math.floor(Math.random() * 4)],
         action: ['user_login', 'fee_payment_processed', 'grade_updated', 'system_backup', 'security_scan'][Math.floor(Math.random() * 5)],
+        category: ['security', 'financial', 'academic', 'system', 'user_management'][Math.floor(Math.random() * 5)],
         severity: ['info', 'warning', 'critical'][Math.floor(Math.random() * 3)],
         description: [
           'User logged in successfully',

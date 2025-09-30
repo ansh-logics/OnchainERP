@@ -6,7 +6,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/auth";
 import { 
@@ -23,8 +23,7 @@ import {
   RefreshCw,
   Filter,
   Clock,
-  Building,
-  BookOpen
+  Building
 } from "lucide-react";
 
 export default function AdminReportsPage() {
@@ -68,7 +67,7 @@ export default function AdminReportsPage() {
       URL.revokeObjectURL(url);
     } else if (exportFormat === 'csv') {
       const csvData = Object.entries(exportData).flatMap(([category, data]) =>
-        Object.entries(data as any).map(([key, value]) => ({
+        Object.entries(data as Record<string, unknown>).map(([key, value]) => ({
           Category: category,
           Metric: key,
           Value: value

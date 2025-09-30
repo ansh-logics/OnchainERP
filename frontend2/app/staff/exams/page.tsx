@@ -9,12 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/auth";
-import { mockExamRecords } from "@/lib/mock-data";
 import { 
   Search,
   FileText, 
   Calendar, 
-  Clock, 
   CheckCircle, 
   AlertTriangle, 
   Eye,
@@ -23,7 +21,6 @@ import {
   Plus,
   Edit,
   Users,
-  GraduationCap,
   Award,
   BookOpen
 } from "lucide-react";
