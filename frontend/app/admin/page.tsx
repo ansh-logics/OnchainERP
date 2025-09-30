@@ -1,23 +1,32 @@
-import { AuthGuard } from "@/components/auth-guard"
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { AdminDashboard } from "@/components/admin/admin-dashboard"
+"use client";
 
-const navigation = [
-  { name: "Dashboard", href: "/admin", icon: "BarChart3" as const, current: true },
-  { name: "Users", href: "/admin/users", icon: "Users" as const },
-  { name: "Courses", href: "/admin/courses", icon: "BookOpen" as const },
-  { name: "Enrollment", href: "/admin/enrollment", icon: "Calendar" as const },
-  { name: "Finance", href: "/admin/finance", icon: "DollarSign" as const },
-  { name: "Settings", href: "/admin/settings", icon: "Settings" as const },
-  { name: "Profile", href: "/admin/profile", icon: "User" as const },
-]
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    if (currentUser.role !== 'admin') {
+      router.push(`/${currentUser.role}/dashboard`);
+      return;
+    }
+    // Redirect to admin dashboard
+    router.push('/admin/dashboard');
+  }, [router]);
+
   return (
-    <AuthGuard allowedRoles={["admin"]}>
-      <DashboardLayout userRole="admin" navigation={navigation}>
-        <AdminDashboard />
-      </DashboardLayout>
-    </AuthGuard>
-  )
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary mx-auto"></div>
+        <p className="mt-4 text-lg">Loading Admin Dashboard...</p>
+      </div>
+    </div>
+  );
 }

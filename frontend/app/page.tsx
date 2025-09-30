@@ -1,245 +1,278 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import Link from "next/link"
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { getCurrentUser } from "@/lib/auth";
 import { 
   GraduationCap, 
   Users, 
-  BookOpen, 
-  Award,
-  MapPin,
-  Phone,
-  Mail,
-  Calendar,
-  TrendingUp,
-  Shield,
-  Globe,
+  CreditCard, 
+  Building, 
+  FileText,
   ArrowRight,
-  ChevronRight
-} from "lucide-react"
+  Zap,
+  Shield,
+  Globe
+} from "lucide-react";
 
 export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    console.log(user);
+    if (user) {
+      // Redirect to appropriate dashboard if already logged in
+      router.push(`/${user.role}/dashboard`);
+    }
+  }, [router]);
+
+  const features = [
+    {
+      icon: Users,
+      title: "Student Management",
+      description: "Comprehensive student profiles, admission tracking, and academic records"
+    },
+    {
+      icon: CreditCard,
+      title: "Fee Collection",
+      description: "Automated fee processing, payment tracking, and digital receipts"
+    },
+    {
+      icon: Building,
+      title: "Hostel Management",
+      description: "Room allocation, occupancy tracking, and maintenance requests"
+    },
+    {
+      icon: FileText,
+      title: "Examination System",
+      description: "Exam scheduling, marks entry, and result generation"
+    }
+  ];
+
+  const benefits = [
+    {
+      icon: Zap,
+      title: "Streamlined Operations",
+      description: "Eliminate manual processes and reduce administrative overhead"
+    },
+    {
+      icon: Shield,
+      title: "Secure & Reliable",
+      description: "Enterprise-grade security with regular backups and monitoring"
+    },
+    {
+      icon: Globe,
+      title: "Cloud-Native",
+      description: "Access from anywhere with real-time data synchronization"
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">ABC College</span>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      {/* Header */}
+      <header className="border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <GraduationCap className="h-5 w-5" />
             </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/programs" className="text-foreground hover:text-primary transition-colors">
-                Programs
-              </Link>
-              <Link href="/admissions" className="text-foreground hover:text-primary transition-colors">
-                Admissions
-              </Link>
-              <Link href="/notices" className="text-foreground hover:text-primary transition-colors">
-                Notices
-              </Link>
-              <Link href="/contact" className="text-foreground hover:text-primary transition-colors">
-                Contact
-              </Link>
-              <Link href="/login">
-                <Button>Login</Button>
-              </Link>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">YuktiERP</h1>
             </div>
           </div>
+          <Button onClick={() => router.push('/auth/login')}>
+            Sign In
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
-      </nav>
+      </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 lg:py-32">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-4xl mx-auto">
-            <Badge variant="outline" className="mb-4">
-              Established 1995 • NAAC A+ Accredited
-            </Badge>
-            <h1 className="text-4xl lg:text-6xl font-bold mb-6">
-              Empowering Future Leaders Through
-              <span className="text-primary block">Quality Education</span>
-            </h1>
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              ABC College of Engineering offers world-class technical education with modern facilities, 
-              experienced faculty, and industry-aligned curriculum to shape tomorrow's innovators.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/admissions">
-                <Button size="lg" className="text-lg px-8">
-                  Apply Now
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link href="/programs">
-                <Button variant="outline" size="lg" className="text-lg px-8">
-                  Explore Programs
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-16 bg-muted/50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="text-3xl lg:text-4xl font-bold text-primary mb-2">1250+</div>
-              <div className="text-muted-foreground">Students</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl lg:text-4xl font-bold text-primary mb-2">85+</div>
-              <div className="text-muted-foreground">Faculty</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl lg:text-4xl font-bold text-primary mb-2">95%</div>
-              <div className="text-muted-foreground">Placement Rate</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl lg:text-4xl font-bold text-primary mb-2">50+</div>
-              <div className="text-muted-foreground">Industry Partners</div>
-            </div>
+      <section className="container mx-auto px-4 py-16 text-center">
+        <div className="max-w-4xl mx-auto">
+          <Badge variant="secondary" className="mb-6">
+            MVP Demo • College Management System
+          </Badge>
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
+            Streamline Your
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              {" "}College Operations
+            </span>
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+            YuktiERP unifies admissions, fee collection, hostel allocation, and examination records 
+            into one lightweight, Apple-inspired platform designed for public colleges.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button size="lg" onClick={() => router.push('/auth/login')}>
+              Get Started
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button variant="outline" size="lg">
+              View Demo
+            </Button>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4">Why Choose ABC College?</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              We provide comprehensive education with modern infrastructure and industry exposure
+      <section className="container mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            Everything You Need in One Platform
+          </h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Replace fragmented systems with a unified solution that connects all aspects 
+            of college administration.
+          </p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {features.map((feature) => (
+            <Card key={feature.title} className="text-center hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <feature.icon className="h-6 w-6 text-primary" />
+                </div>
+                <CardTitle className="text-lg">{feature.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-sm">
+                  {feature.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Benefits Section */}
+      <section className="bg-white/50 py-16">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Why Choose YuktiERP?
+            </h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Built specifically for the unique needs of public colleges with 
+              cost-effectiveness and ease of use in mind.
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <BookOpen className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Modern Curriculum</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Industry-aligned curriculum updated regularly to meet current market demands and technological advancements.
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {benefits.map((benefit) => (
+              <div key={benefit.title} className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <benefit.icon className="h-8 w-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">
+                  {benefit.title}
+                </h3>
+                <p className="text-gray-600">
+                  {benefit.description}
                 </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <Users className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Expert Faculty</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Highly qualified faculty with industry experience and research background to guide your academic journey.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <TrendingUp className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Excellent Placements</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Strong industry connections ensuring excellent placement opportunities with top companies globally.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <Shield className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Research Excellence</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  State-of-the-art research facilities and opportunities to work on cutting-edge projects and publications.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <Globe className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>Global Exposure</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  International collaborations, exchange programs, and global perspective in education delivery.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 hover:border-primary/50 transition-colors">
-              <CardHeader>
-                <Award className="h-12 w-12 text-primary mb-4" />
-                <CardTitle>NAAC A+ Accredited</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  Recognized for excellence in education quality, infrastructure, and overall institutional performance.
-                </p>
-              </CardContent>
-            </Card>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-background border-t py-12">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <GraduationCap className="h-8 w-8 text-primary" />
-                <span className="text-xl font-bold">ABC College</span>
+      {/* Demo Accounts Section */}
+      <section className="container mx-auto px-4 py-16">
+        <div className="max-w-2xl mx-auto">
+          <Card className="shadow-xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl">Try the Demo</CardTitle>
+              <CardDescription>
+                Explore different user roles and see how YuktiERP works for each stakeholder
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="border-2 border-green-200 bg-green-50">
+                    <CardHeader className="text-center pb-2">
+                      <Badge className="bg-green-100 text-green-800 mx-auto">Student</Badge>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <p className="text-sm font-medium">student@yukti.edu</p>
+                      <p className="text-xs text-gray-600 mb-3">Password: demo123</p>
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        <li>• View profile & grades</li>
+                        <li>• Pay fees online</li>
+                        <li>• Check hostel status</li>
+                        <li>• Access exam results</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-blue-200 bg-blue-50">
+                    <CardHeader className="text-center pb-2">
+                      <Badge className="bg-blue-100 text-blue-800 mx-auto">Staff</Badge>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <p className="text-sm font-medium">staff@yukti.edu</p>
+                      <p className="text-xs text-gray-600 mb-3">Password: demo123</p>
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        <li>• Manage admissions</li>
+                        <li>• Collect fees</li>
+                        <li>• Allocate hostel rooms</li>
+                        <li>• Enter exam marks</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-red-200 bg-red-50">
+                    <CardHeader className="text-center pb-2">
+                      <Badge className="bg-red-100 text-red-800 mx-auto">Admin</Badge>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <p className="text-sm font-medium">admin@yukti.edu</p>
+                      <p className="text-xs text-gray-600 mb-3">Password: demo123</p>
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        <li>• View analytics</li>
+                        <li>• Manage users</li>
+                        <li>• Generate reports</li>
+                        <li>• System settings</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => router.push('/auth/login')}
+                >
+                  Start Demo
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
               </div>
-              <p className="text-muted-foreground">
-                Empowering future leaders through quality technical education since 1995.
-              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t bg-white/95 backdrop-blur">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground">
+                <GraduationCap className="h-4 w-4" />
+              </div>
+              <span className="font-semibold">YuktiERP</span>
+              <Badge variant="outline" className="text-xs">v1.0.0 MVP</Badge>
             </div>
-            
-            <div>
-              <h3 className="font-semibold mb-4">Quick Links</h3>
-              <ul className="space-y-2 text-muted-foreground">
-                <li><Link href="/programs" className="hover:text-primary">Programs</Link></li>
-                <li><Link href="/admissions" className="hover:text-primary">Admissions</Link></li>
-                <li><Link href="/notices" className="hover:text-primary">Notices</Link></li>
-                <li><Link href="/contact" className="hover:text-primary">Contact</Link></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold mb-4">Student Portal</h3>
-              <ul className="space-y-2 text-muted-foreground">
-                <li><Link href="/login" className="hover:text-primary">Login</Link></li>
-                <li><Link href="/register" className="hover:text-primary">Register</Link></li>
-                <li><Link href="/student" className="hover:text-primary">Dashboard</Link></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold mb-4">Contact Info</h3>
-              <ul className="space-y-2 text-muted-foreground">
-                <li>+91-80-12345678</li>
-                <li>info@abc.edu</li>
-                <li>Tech City, Karnataka</li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t mt-8 pt-8 text-center text-muted-foreground">
-            <p>&copy; 2024 ABC College of Engineering. All rights reserved.</p>
+            <p className="text-sm text-gray-600">
+              Built for the future of college management
+            </p>
           </div>
         </div>
       </footer>
     </div>
-  )
+  );
 }

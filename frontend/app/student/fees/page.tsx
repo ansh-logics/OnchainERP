@@ -1,431 +1,352 @@
-"use client"
+"use client";
 
-import { AuthGuard } from "@/components/auth-guard"
-import { DashboardLayout } from "@/components/dashboard-layout"
-import { DataGrid, Column } from "@/components/ui/data-grid"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PaymentModal } from "@/components/payment/payment-modal";
+import { getCurrentUser } from "@/lib/auth";
+import { mockFeeRecords, mockStudent, type FeeRecord } from "@/lib/mock-data";
+import { downloadReceipt } from "@/components/payment/receipt";
 import { 
   CreditCard, 
-  Download, 
-  Receipt, 
-  AlertTriangle, 
+  Download,
   CheckCircle,
-  DollarSign,
-  Calendar,
-  FileText,
-  Wallet
-} from "lucide-react"
-import { mockFees, mockDashboardStats } from "@/lib/mock-data"
-
-const navigation = [
-  { name: "Dashboard", href: "/student", icon: "BarChart3" as const },
-  { name: "Admissions", href: "/student/admissions", icon: "FileText" as const },
-  { name: "Fees", href: "/student/fees", icon: "DollarSign" as const, current: true },
-  { name: "Hostel", href: "/student/hostel", icon: "User" as const },
-  { name: "Library", href: "/student/library", icon: "BookOpen" as const },
-  { name: "Academics", href: "/student/academics", icon: "GraduationCap" as const },
-  { name: "Profile", href: "/student/profile", icon: "User" as const },
-]
-
-interface PaymentFormData {
-  amount: number
-  paymentMethod: string
-  cardNumber: string
-  expiryDate: string
-  cvv: string
-  nameOnCard: string
-}
+  AlertCircle,
+  Clock,
+  History
+} from "lucide-react";
 
 export default function StudentFeesPage() {
-  const [selectedFee, setSelectedFee] = useState<any>(null)
-  const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
-    amount: 0,
-    paymentMethod: 'card',
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
-    nameOnCard: ''
-  })
-  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [user, setUser] = useState<{name: string; role: string} | null>(null);
+  const [feeRecords, setFeeRecords] = useState(mockFeeRecords);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedFee, setSelectedFee] = useState<FeeRecord | null>(null);
+  const router = useRouter();
 
-  const studentFees = mockFees
-  const stats = mockDashboardStats.student
-
-  const feeColumns: Column[] = [
-    {
-      key: 'type',
-      title: 'Fee Type',
-      sortable: true,
-      render: (value) => (
-        <div className="font-medium capitalize">
-          {value.replace('_', ' ')} Fee
-        </div>
-      )
-    },
-    {
-      key: 'amount',
-      title: 'Amount',
-      sortable: true,
-      render: (value) => (
-        <div className="font-medium">
-          ₹{value.toLocaleString()}
-        </div>
-      )
-    },
-    {
-      key: 'dueDate',
-      title: 'Due Date',
-      sortable: true,
-      render: (value) => new Date(value).toLocaleDateString()
-    },
-    {
-      key: 'status',
-      title: 'Status',
-      sortable: true,
-      render: (value) => {
-        const variants: Record<string, any> = {
-          paid: { variant: 'default', icon: CheckCircle, color: 'text-green-600' },
-          pending: { variant: 'outline', icon: AlertTriangle, color: 'text-yellow-600' },
-          overdue: { variant: 'destructive', icon: AlertTriangle, color: 'text-red-600' },
-          partial: { variant: 'outline', icon: AlertTriangle, color: 'text-orange-600' }
-        }
-        const config = variants[value] || variants.pending
-        const Icon = config.icon
-        
-        return (
-          <div className="flex items-center gap-2">
-            <Icon className={`h-4 w-4 ${config.color}`} />
-            <Badge variant={config.variant}>
-              {value.charAt(0).toUpperCase() + value.slice(1)}
-            </Badge>
-          </div>
-        )
-      }
-    },
-    {
-      key: 'paidAmount',
-      title: 'Paid Amount',
-      render: (value, record) => (
-        <div>
-          {value ? `₹${value.toLocaleString()}` : '-'}
-        </div>
-      )
-    },
-    {
-      key: 'paidDate',
-      title: 'Paid Date',
-      render: (value) => value ? new Date(value).toLocaleDateString() : '-'
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (!currentUser || currentUser.role !== 'student') {
+      router.push('/login');
+      return;
     }
-  ]
+    setUser(currentUser);
+  }, [router]);
 
-  const handlePayment = (fee: any) => {
-    setSelectedFee(fee)
-    setPaymentForm(prev => ({
-      ...prev,
-      amount: fee.amount - (fee.paidAmount || 0)
-    }))
-    setIsPaymentDialogOpen(true)
+  if (!user) {
+    return <div>Loading...</div>;
   }
 
-  const handlePaymentSubmit = async () => {
-    setIsProcessing(true)
-    
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // Update fee status (in real app, this would be handled by the backend)
-    const updatedFee = {
-      ...selectedFee,
-      status: 'paid',
-      paidAmount: selectedFee.amount,
-      paidDate: new Date().toISOString(),
-      receipt: `RCP${Date.now()}`
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
+      case 'pending':
+        return <Clock className="h-5 w-5 text-yellow-600" />;
+      case 'overdue':
+        return <AlertCircle className="h-5 w-5 text-red-600" />;
+      default:
+        return <Clock className="h-5 w-5 text-gray-600" />;
     }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'overdue':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handlePayNow = (fee: FeeRecord) => {
+    setSelectedFee(fee);
+    setPaymentModalOpen(true);
+  };
+
+  const handlePaymentSuccess = (feeId: string, transactionId: string) => {
+    setFeeRecords(prevFees => 
+      prevFees.map(fee => 
+        fee.id === feeId 
+          ? { 
+              ...fee, 
+              status: 'paid' as const, 
+              paidDate: new Date().toISOString().split('T')[0],
+              transactionId 
+            }
+          : fee
+      )
+    );
+    setPaymentModalOpen(false);
+    setSelectedFee(null);
+  };
+
+  const handleDownloadReceipt = (fee: FeeRecord) => {
+    const receiptData = {
+      transactionId: fee.transactionId || `TXN${Date.now()}`,
+      feeType: fee.type,
+      amount: fee.amount,
+      paymentDate: fee.paidDate || new Date().toISOString(),
+      semester: fee.semester,
+      studentName: mockStudent.name,
+      studentId: mockStudent.id,
+      rollNumber: mockStudent.rollNumber,
+      department: mockStudent.department,
+      paymentMethod: "Card", // This could be stored in the fee record
+      dueDate: fee.dueDate,
+      academicYear: "2024-25"
+    };
     
-    alert('Payment successful! Receipt will be emailed to you.')
-    setIsProcessing(false)
-    setIsPaymentDialogOpen(false)
-    setSelectedFee(null)
-  }
+    downloadReceipt(receiptData);
+  };
 
-  const handleDownloadReceipt = (fee: any) => {
-    // In a real app, this would download the actual receipt
-    alert(`Downloading receipt for ${fee.receipt}`)
-  }
-
-  const totalPending = studentFees
-    .filter(fee => fee.status === 'pending' || fee.status === 'overdue')
-    .reduce((sum, fee) => sum + fee.amount, 0)
-
-  const totalPaid = studentFees
-    .filter(fee => fee.status === 'paid')
-    .reduce((sum, fee) => sum + (fee.paidAmount || 0), 0)
+  const totalPaid = feeRecords.filter(fee => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
+  const totalPending = feeRecords.filter(fee => fee.status === 'pending').reduce((sum, fee) => sum + fee.amount, 0);
+  const paidFees = feeRecords.filter(fee => fee.status === 'paid');
+  const pendingFees = feeRecords.filter(fee => fee.status !== 'paid');
 
   return (
-    <AuthGuard allowedRoles={["student"]}>
-      <DashboardLayout userRole="student" navigation={navigation}>
-        <div className="space-y-8">
-          {/* Header */}
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Fee Management</h1>
-            <p className="text-muted-foreground">View and pay your fees online</p>
-          </div>
+    <DashboardLayout title="Fee Management" userRole="student">
+      <div className="space-y-6">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">₹{totalPaid.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">This academic year</p>
+            </CardContent>
+          </Card>
 
-          {/* Fee Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Pending</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">₹{totalPending.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">
-                  {studentFees.filter(f => f.status === 'pending' || f.status === 'overdue').length} pending fees
-                </p>
-              </CardContent>
-            </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending Amount</CardTitle>
+              <Clock className="h-4 w-4 text-yellow-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">₹{totalPending.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Due soon</p>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">₹{totalPaid.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">
-                  {studentFees.filter(f => f.status === 'paid').length} fees paid
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">This Semester</CardTitle>
-                <Calendar className="h-4 w-4 text-blue-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">Semester 7</div>
-                <p className="text-xs text-muted-foreground">
-                  Academic Year 2023-24
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Pending Fees Alert */}
-          {totalPending > 0 && (
-            <Card className="border-red-200 bg-red-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-red-800">
-                  <AlertTriangle className="h-5 w-5" />
-                  Pending Fees - Action Required
-                </CardTitle>
-                <CardDescription className="text-red-700">
-                  You have ₹{totalPending.toLocaleString()} in pending fees. Please pay by the due date to avoid late charges.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => {
-                  const pendingFee = studentFees.find(f => f.status === 'pending' || f.status === 'overdue')
-                  if (pendingFee) handlePayment(pendingFee)
-                }}>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Pay Now
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Fees Table */}
-          <DataGrid
-            data={studentFees}
-            columns={feeColumns}
-            title="Fee Details"
-            searchable={true}
-            exportable={true}
-            actions={[
-              {
-                label: 'Pay Now',
-                onClick: (record) => handlePayment(record),
-                variant: 'default'
-              },
-              {
-                label: 'Download Receipt',
-                onClick: (record) => handleDownloadReceipt(record),
-                variant: 'outline'
-              }
-            ]}
-          />
-
-          {/* Payment Dialog */}
-          <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Pay Fee
-                </DialogTitle>
-                <DialogDescription>
-                  Complete your payment for {selectedFee?.type} fee
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4">
-                {/* Payment Summary */}
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium">Fee Type:</span>
-                    <span className="capitalize">{selectedFee?.type} Fee</span>
-                  </div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium">Amount:</span>
-                    <span className="text-lg font-bold">₹{paymentForm.amount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">Due Date:</span>
-                    <span>{selectedFee ? new Date(selectedFee.dueDate).toLocaleDateString() : ''}</span>
-                  </div>
-                </div>
-
-                {/* Payment Method */}
-                <div className="space-y-2">
-                  <Label htmlFor="paymentMethod">Payment Method</Label>
-                  <Select 
-                    value={paymentForm.paymentMethod} 
-                    onValueChange={(value) => setPaymentForm(prev => ({ ...prev, paymentMethod: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="card">Credit/Debit Card</SelectItem>
-                      <SelectItem value="netbanking">Net Banking</SelectItem>
-                      <SelectItem value="upi">UPI</SelectItem>
-                      <SelectItem value="wallet">Digital Wallet</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Card Details (shown when card is selected) */}
-                {paymentForm.paymentMethod === 'card' && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nameOnCard">Name on Card</Label>
-                      <Input
-                        id="nameOnCard"
-                        placeholder="Enter name as on card"
-                        value={paymentForm.nameOnCard}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, nameOnCard: e.target.value }))}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input
-                        id="cardNumber"
-                        placeholder="1234 5678 9012 3456"
-                        value={paymentForm.cardNumber}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, cardNumber: e.target.value }))}
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="expiryDate">Expiry Date</Label>
-                        <Input
-                          id="expiryDate"
-                          placeholder="MM/YY"
-                          value={paymentForm.expiryDate}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, expiryDate: e.target.value }))}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cvv">CVV</Label>
-                        <Input
-                          id="cvv"
-                          placeholder="123"
-                          value={paymentForm.cvv}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, cvv: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handlePaymentSubmit} disabled={isProcessing}>
-                    {isProcessing ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Pay ₹{paymentForm.amount.toLocaleString()}
-                      </>
-                    )}
-                  </Button>
-                </div>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {feeRecords.filter(fee => fee.status === 'paid').length}/{feeRecords.length}
               </div>
-            </DialogContent>
-          </Dialog>
+              <p className="text-xs text-muted-foreground">Payments completed</p>
+            </CardContent>
+          </Card>
+        </div>
 
-          {/* Payment History */}
+        {/* Student Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Student Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p><strong>Name:</strong> {mockStudent.name}</p>
+                <p><strong>Roll Number:</strong> {mockStudent.rollNumber}</p>
+              </div>
+              <div>
+                <p><strong>Department:</strong> {mockStudent.department}</p>
+                <p><strong>Current Semester:</strong> {mockStudent.semester}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pending Fees */}
+        {pendingFees.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5" />
-                Recent Transactions
+                <AlertCircle className="h-5 w-5 text-orange-600" />
+                Pending Fees
               </CardTitle>
-              <CardDescription>Your payment history</CardDescription>
+              <CardDescription>Outstanding fee payments that require your attention</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {studentFees.filter(fee => fee.status === 'paid').slice(0, 3).map((fee) => (
-                  <div key={fee.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-full">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
+                {pendingFees.map((fee) => (
+                  <div key={fee.id} className="border border-orange-200 rounded-lg p-4 bg-orange-50/30 hover:bg-orange-50 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        {getStatusIcon(fee.status)}
+                        <div>
+                          <h3 className="font-semibold">
+                            {fee.type.charAt(0).toUpperCase() + fee.type.slice(1)} Fee
+                          </h3>
+                          <p className="text-sm text-gray-600">{fee.semester}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium capitalize">{fee.type} Fee</p>
-                        <p className="text-sm text-muted-foreground">
-                          Paid on {fee.paidDate ? new Date(fee.paidDate).toLocaleDateString() : ''}
-                        </p>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-orange-700">₹{fee.amount.toLocaleString()}</p>
+                        <Badge className={getStatusColor(fee.status)}>
+                          {fee.status.toUpperCase()}
+                        </Badge>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium">₹{fee.paidAmount?.toLocaleString()}</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDownloadReceipt(fee)}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        Receipt
-                      </Button>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                      <div>
+                        <p className="font-medium">Due Date</p>
+                        <p>{new Date(fee.dueDate).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Days {new Date(fee.dueDate) < new Date() ? 'Overdue' : 'Remaining'}</p>
+                        <p className={new Date(fee.dueDate) < new Date() ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
+                          {Math.abs(Math.ceil((new Date(fee.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} days
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Semester</p>
+                        <p>{fee.semester}</p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button 
+                          size="sm" 
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handlePayNow(fee)}
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Pay Now
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-        </div>
-      </DashboardLayout>
-    </AuthGuard>
-  )
+        )}
+
+        {/* Payment History */}
+        {paidFees.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-green-600" />
+                Payment History
+              </CardTitle>
+              <CardDescription>Successfully completed fee payments with downloadable receipts</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {paidFees.map((fee) => (
+                  <div key={fee.id} className="border border-green-200 rounded-lg p-4 bg-green-50/30 hover:bg-green-50 transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <div>
+                          <h3 className="font-semibold">
+                            {fee.type.charAt(0).toUpperCase() + fee.type.slice(1)} Fee
+                          </h3>
+                          <p className="text-sm text-gray-600">{fee.semester}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-green-700">₹{fee.amount.toLocaleString()}</p>
+                        <Badge className="bg-green-100 text-green-800">
+                          PAID
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                      <div>
+                        <p className="font-medium">Due Date</p>
+                        <p>{new Date(fee.dueDate).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Paid Date</p>
+                        <p className="text-green-600 font-medium">{fee.paidDate ? new Date(fee.paidDate).toLocaleDateString() : 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Transaction ID</p>
+                        <p className="text-xs text-gray-500 font-mono">{fee.transactionId || 'N/A'}</p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleDownloadReceipt(fee)}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Receipt
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Payment Instructions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment Instructions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-primary">1</span>
+                </div>
+                <p>Click &quot;Pay Now&quot; button next to any pending fee</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-primary">2</span>
+                </div>
+                <p>Choose your preferred payment method (Net Banking, UPI, Cards)</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-xs font-bold text-primary">3</span>
+                </div>
+                <p>Complete the payment and download your receipt</p>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-lg mt-4">
+                <p className="text-blue-800 text-sm">
+                  <strong>Note:</strong> All payments are processed securely. Receipts will be automatically 
+                  generated and available for download immediately after successful payment.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Payment Modal */}
+        {selectedFee && (
+          <PaymentModal
+            isOpen={paymentModalOpen}
+            onClose={() => {
+              setPaymentModalOpen(false);
+              setSelectedFee(null);
+            }}
+            feeRecord={selectedFee}
+            onPaymentSuccess={handlePaymentSuccess}
+          />
+        )}
+      </div>
+    </DashboardLayout>
+  );
 }
