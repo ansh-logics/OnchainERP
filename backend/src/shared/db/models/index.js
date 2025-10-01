@@ -33,10 +33,12 @@ const mongoModels = require('./mongodb');
 // These are associations between models from different modules
 
 // User cross-module associations
+User.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 User.hasOne(Student, { foreignKey: 'userId', as: 'studentProfile' });
 User.hasOne(Faculty, { foreignKey: 'userId', as: 'facultyProfile' });
 
 // College cross-module associations
+College.belongsTo(User, { foreignKey: 'adminId', as: 'admin' });
 College.hasMany(Department, { foreignKey: 'collegeId', as: 'departments' });
 College.hasMany(Student, { foreignKey: 'collegeId', as: 'students' });
 College.hasMany(Faculty, { foreignKey: 'collegeId', as: 'faculty' });
@@ -50,6 +52,9 @@ College.hasMany(ExamHall, { foreignKey: 'collegeId', as: 'examHalls' });
 College.hasMany(Classroom, { foreignKey: 'collegeId', as: 'classrooms' });
 
 // Student cross-module associations
+Student.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Student.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
+Student.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
 Student.hasMany(Transaction, { foreignKey: 'studentId', as: 'transactions' });
 Student.hasMany(HostelAllocation, { foreignKey: 'studentId', as: 'hostelAllocations' });
 Student.hasMany(LibraryIssue, { foreignKey: 'studentId', as: 'libraryIssues' });
@@ -57,8 +62,16 @@ Student.hasMany(AssignmentSubmission, { foreignKey: 'studentId', as: 'assignment
 Student.hasMany(ExamResult, { foreignKey: 'studentId', as: 'examResults' });
 
 // Faculty cross-module associations
+Faculty.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Faculty.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
+Faculty.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
 Faculty.hasMany(Section, { foreignKey: 'classTeacherId', as: 'sections' });
+
+// Department cross-module associations
+Department.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
+Department.hasMany(Student, { foreignKey: 'departmentId', as: 'students' });
 Department.hasMany(Faculty, { foreignKey: 'departmentId', as: 'faculty' });
+Department.hasMany(Course, { foreignKey: 'departmentId', as: 'courses' });
 
 // Course cross-module associations
 Course.hasMany(Attendance, { foreignKey: 'courseId', as: 'attendance' });

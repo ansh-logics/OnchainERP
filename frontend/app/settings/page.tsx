@@ -201,17 +201,17 @@ export default function SettingsPage() {
                     <div className="space-y-2">
                       <Label>Student ID</Label>
                       <div className="flex items-center gap-2">
-                        <Input value={settings.studentId} disabled />
+                        <Input defaultValue={settings.studentId} readOnly />
                         <Badge variant="secondary">Verified</Badge>
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Department</Label>
-                      <Input value={settings.department} disabled />
+                      <Input defaultValue={settings.department} readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>Current Semester</Label>
-                      <Input value={settings.semester} disabled />
+                      <Input defaultValue={settings.semester} readOnly />
                     </div>
                   </div>
                 </div>

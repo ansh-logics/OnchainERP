@@ -60,6 +60,7 @@ app.use('/api/examinations', require('./examinations/routes'));
 app.use('/api/library-services', require('./library/routes'));
 app.use('/api/laboratory', require('./laboratory/routes'));
 app.use('/api/administration', require('./administration/routes'));
+app.use('/api/dashboard', require('./dashboard/routes'));
 
 // Backward compatibility routes
 app.use('/api/courses', require('./academic/routes/courseRoutes'));

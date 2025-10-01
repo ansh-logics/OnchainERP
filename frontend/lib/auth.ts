@@ -1,82 +1,58 @@
-// Mock authentication system for MVP demo
-export type UserRole = 'student' | 'staff' | 'admin';
+// Authentication utilities for real backend integration
+export type UserRole = 'student' | 'faculty' | 'admin' | 'cashier' | 'super_admin';
 
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
-  avatar?: string;
+  phone?: string;
+  isActive?: boolean;
+  isEmailVerified?: boolean;
+  lastLogin?: string;
+  studentId?: string;
+  facultyId?: string;
+  collegeId?: string;
+  college?: {
+    id: string;
+    name: string;
+    shortName: string;
+  };
 }
-
-// Mock user data for demo
-export const mockUsers: Record<string, User> = {
-  'student@yukti.edu': {
-    id: '1',
-    name: 'Priya Sharma',
-    email: 'student@yukti.edu',
-    role: 'student',
-  },
-  'staff@yukti.edu': {
-    id: '2',
-    name: 'Dr. Rajesh Kumar',
-    email: 'staff@yukti.edu',
-    role: 'staff',
-  },
-  'admin@yukti.edu': {
-    id: '3',
-    name: 'Prof. Sunita Patel',
-    email: 'admin@yukti.edu',
-    role: 'admin',
-  },
-};
-
-export const authenticate = (email: string, password: string): User | null => {
-  // Mock authentication - in real app, this would call an API
-  if (mockUsers[email] && password === 'demo123') {
-    return mockUsers[email];
-  }
-  return null;
-};
 
 export const getCurrentUser = (): User | null => {
   if (typeof window === 'undefined') return null;
   
-  const userJson = localStorage.getItem('yukti_user');
+  const userJson = localStorage.getItem('user');
   if (userJson) {
     try {
       return JSON.parse(userJson);
     } catch (error) {
       console.error('Error parsing user data from localStorage:', error);
-      localStorage.removeItem('yukti_user');
+      localStorage.removeItem('user');
+      localStorage.removeItem('authToken');
       return null;
     }
   }
   return null;
 };
 
-export const setCurrentUser = (user: User | null) => {
-  if (typeof window === 'undefined') return;
-  
-  console.log('setCurrentUser called with:', user);
-  
-  if (user) {
-    try {
-      localStorage.setItem('yukti_user', JSON.stringify(user));
-      console.log('✅ User successfully set in localStorage:', user);
-      
-      // Verify it was set correctly
-      const storedUser = localStorage.getItem('yukti_user');
-      console.log('✅ Verification - stored user:', storedUser);
-    } catch (error) {
-      console.error('❌ Error setting user in localStorage:', error);
-    }
-  } else {
-    localStorage.removeItem('yukti_user');
-    console.log('✅ User removed from localStorage');
-  }
+export const getAuthToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('authToken');
+};
+
+export const isAuthenticated = (): boolean => {
+  return getCurrentUser() !== null && getAuthToken() !== null;
 };
 
 export const logout = () => {
-  setCurrentUser(null);
+  if (typeof window === 'undefined') return;
+  
+  // Clear all authentication data
+  localStorage.removeItem('user');
+  localStorage.removeItem('authToken');
+  
+  // Optionally redirect to login page
+  window.location.href = '/auth/login';
 };

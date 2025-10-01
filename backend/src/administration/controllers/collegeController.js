@@ -34,32 +34,12 @@ const registerCollege = async (req, res, next) => {
       // Registration Details
       registrationNumber,
       
-      // Accreditation
-      naacGrade,
-      naacValidUntil,
-      nbaAccredited,
-      nbaValidUntil,
-      
-      // Infrastructure
-      campusArea,
-      totalBuildings,
-      totalClassrooms,
-      totalLaboratories,
-      
-      // Library Details
-      libraryTotalBooks,
-      libraryDigitalResources,
-      libraryArea,
-      
       // Admin Details
       adminName,
       adminEmail,
       adminPassword,
       adminPhone,
       
-      // Settings
-      academicStartMonth,
-      academicEndMonth
     } = req.body;
 
     // Check if college with same shortName or registrationNumber already exists
@@ -100,7 +80,7 @@ const registerCollege = async (req, res, next) => {
       isEmailVerified: false
     });
 
-    // Create college
+    // Create college with initial setup status
     const college = await College.create({
       name,
       shortName: shortName.toUpperCase(),
@@ -122,32 +102,18 @@ const registerCollege = async (req, res, next) => {
       website,
       fax,
       
-      // Infrastructure
-      campusArea,
-      totalBuildings,
-      totalClassrooms,
-      totalLaboratories,
-      
-      // Library
-      libraryTotalBooks,
-      libraryDigitalResources: libraryDigitalResources || false,
-      libraryArea,
-      
-      // Accreditation
-      naacGrade,
-      naacValidUntil,
-      nbaAccredited: nbaAccredited || false,
-      nbaValidUntil,
-      
-      // Academic year
-      academicStartMonth: academicStartMonth || 7,
-      academicEndMonth: academicEndMonth || 6,
+      // Setup tracking - Basic registration complete, need profile setup
+      profileCompleted: false,
+      setupStep: 1, // 1=Basic Info registered, needs profile completion
       
       // Admin reference
       adminId: adminUser.id,
       
       isActive: true
     });
+
+    // Update admin user with college reference
+    await adminUser.update({ collegeId: college.id });
 
     // Log the college registration
     await LoggingService.logSystemEvent(
@@ -302,13 +268,36 @@ const updateCollege = async (req, res, next) => {
     // Update college
     college = await college.update(req.body);
 
+    // Check if profile setup should be marked as complete
+    // Profile is complete if branding and mission/vision are set up
+    const profileCompletion = college.validateRequiredFields();
+    const hasBranding = !!(college.logo || college.vision || college.mission);
+    
+    if (profileCompletion.isValid && hasBranding && !college.profileCompleted) {
+      await college.update({ 
+        profileCompleted: true, 
+        setupStep: 5 
+      });
+    } else if (!college.profileCompleted) {
+      // Update setup step based on what's been completed
+      let newStep = college.setupStep;
+      if (hasBranding && newStep < 2) newStep = 2;
+      if (college.campusArea && newStep < 3) newStep = 3;
+      
+      if (newStep !== college.setupStep) {
+        await college.update({ setupStep: newStep });
+      }
+    }
+
     // Log the update
     await LoggingService.logUserAction(
       'update_college',
       req.user.id,
       { 
         collegeId: req.params.id,
-        updatedFields: Object.keys(req.body)
+        updatedFields: Object.keys(req.body),
+        profileCompleted: college.profileCompleted,
+        setupStep: college.setupStep
       },
       { 
         userRole: req.user.role,
@@ -571,6 +560,79 @@ const getCollegeDepartments = async (req, res, next) => {
   }
 };
 
+// @desc    Get college setup status
+// @route   GET /api/colleges/setup-status
+// @access  Private/Admin
+const getCollegeSetupStatus = async (req, res, next) => {
+  try {
+    // Get user's college ID
+    const collegeId = req.user.collegeId;
+    
+    if (!collegeId) {
+      return next(new ErrorResponse('User not associated with any college', 400));
+    }
+
+    // Get college with admin details
+    const college = await College.findByPk(collegeId, {
+      include: [
+        {
+          model: User,
+          as: 'admin',
+          attributes: ['id', 'name', 'email', 'phone']
+        }
+      ]
+    });
+
+    if (!college) {
+      return next(new ErrorResponse('College not found', 404));
+    }
+
+    // Determine missing fields for profile completion
+    const requiredProfileFields = ['logo', 'motto', 'vision', 'mission'];
+    const missingFields = [];
+
+    requiredProfileFields.forEach(field => {
+      if (!college[field] || college[field] === '') {
+        missingFields.push(field);
+      }
+    });
+
+    // If no required profile fields are missing, mark profile as complete
+    const profileCompleted = missingFields.length === 0;
+
+    // Update college if profile completion status changed
+    if (college.profileCompleted !== profileCompleted) {
+      await college.update({ 
+        profileCompleted,
+        setupStep: profileCompleted ? 5 : college.setupStep 
+      });
+    }
+
+    const setupStatus = {
+      profileCompleted: college.profileCompleted,
+      setupStep: college.setupStep,
+      missingFields: missingFields,
+      college: {
+        name: college.name,
+        shortName: college.shortName,
+        logo: college.logo,
+        primaryColor: college.primaryColor,
+        secondaryColor: college.secondaryColor,
+        accentColor: college.accentColor
+      }
+    };
+
+    res.status(200).json({
+      success: true,
+      data: setupStatus
+    });
+
+  } catch (error) {
+    console.error('College setup status error:', error);
+    next(new ErrorResponse('Failed to fetch college setup status', 500));
+  }
+};
+
 module.exports = {
   registerCollege,
   getColleges,
@@ -579,5 +641,6 @@ module.exports = {
   deleteCollege,
   addDepartment,
   getCollegeDepartments,
-  getCollegeStats
+  getCollegeStats,
+  getCollegeSetupStatus
 };

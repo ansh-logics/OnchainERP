@@ -7,7 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
-import { mockAnalytics } from "@/lib/mock-data";
+import { 
+  fetchDashboardAnalytics, 
+  fetchCollegeSetupStatus,
+  DashboardAnalytics,
+  CollegeSetupStatus,
+  handleApiError 
+} from "@/lib/api";
 import { 
   Users, 
   Building, 
@@ -22,27 +28,176 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const [user, setUser] = useState<{name: string; role: string} | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [collegeSetupStatus, setCollegeSetupStatus] = useState<CollegeSetupStatus | null>(null);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [error, setError] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    if (currentUser.role !== 'admin') {
-      router.push(`/${currentUser.role}/dashboard`);
-      return;
-    }
-    setUser(currentUser);
+    initializeDashboard();
   }, [router]);
 
-  if (!user) {
-    return <div>Loading...</div>;
+  const initializeDashboard = async () => {
+    try {
+      // Check authentication first
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        router.push('/auth/login');
+        return;
+      }
+      
+      if (currentUser.role !== 'admin') {
+        router.push('/auth/login');
+        return;
+      }
+
+      setUser(currentUser);
+      
+      // Fetch data in parallel
+      const [setupResponse, analyticsResponse] = await Promise.all([
+        fetchCollegeSetupStatus(),
+        fetchDashboardAnalytics()
+      ]);
+
+      // Handle setup status
+      if (setupResponse.success && setupResponse.data) {
+        setCollegeSetupStatus(setupResponse.data);
+      } else {
+        console.error('Failed to fetch setup status:', setupResponse.error);
+        // Set default setup status if API fails
+        setCollegeSetupStatus({
+          profileCompleted: false,
+          setupStep: 1,
+          missingFields: ['branding'],
+          college: {
+            name: currentUser.college?.name || 'Your College',
+            shortName: currentUser.college?.shortName || 'YC'
+          }
+        });
+      }
+
+      // Handle analytics
+      if (analyticsResponse.success && analyticsResponse.data) {
+        setAnalytics(analyticsResponse.data);
+      } else {
+        console.error('Failed to fetch analytics:', analyticsResponse.error);
+        setError(handleApiError(analyticsResponse.error));
+        // Set fallback mock data if API fails
+        setAnalytics({
+          totalStudents: 1250,
+          totalFaculty: 85,
+          revenue: 56200000,
+          hostelOccupancy: 87,
+          totalDepartments: 8,
+          activeAlerts: 4,
+          pendingFees: 125,
+          upcomingExams: 12
+        });
+      }
+      
+    } catch (error) {
+      console.error('Dashboard initialization error:', error);
+      setError('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
   }
 
-  const analytics = mockAnalytics.admin;
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg text-red-600">Error: {error}</div>
+      </div>
+    );
+  }
+
+  // Show setup completion prompt if college profile is not complete
+  if (collegeSetupStatus && !collegeSetupStatus.profileCompleted) {
+    return (
+      <DashboardLayout title="Complete Setup" userRole="admin">
+        <div className="min-h-screen flex items-center justify-center p-6">
+          <Card className="w-full max-w-2xl">
+            <CardHeader className="text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-8 w-8 text-amber-600" />
+              </div>
+              <CardTitle className="text-2xl">Complete Your College Profile</CardTitle>
+              <CardDescription className="text-base">
+                Welcome to YuktiERP! To access the full dashboard and start managing your college, 
+                please complete your college profile setup.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-2">Setup Progress</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-700">Basic Information</span>
+                    <Badge variant="default" className="bg-green-600">Complete</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-700">College Profile & Branding</span>
+                    <Badge variant="secondary">Pending</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-700">Infrastructure Details</span>
+                    <Badge variant="secondary">Optional</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-700">Academic Calendar</span>
+                    <Badge variant="secondary">Pending</Badge>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={() => router.push('/admin/college-profile')} 
+                  className="flex-1"
+                >
+                  <Building className="h-4 w-4 mr-2" />
+                  Complete College Profile
+                </Button>
+                <Button 
+                  onClick={() => router.push('/admin/academic-calendar')} 
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Setup Academic Calendar
+                </Button>
+              </div>
+              
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  Need help? Contact our support team or visit our documentation.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Return early if analytics is not loaded yet
+  if (!analytics) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading dashboard data...</div>
+      </div>
+    );
+  }
 
   const recentSystemActivity = [
     { id: 1, event: "New faculty member added", details: "Dr. Sarah Johnson - Computer Science", time: "1 hour ago", type: "user" },

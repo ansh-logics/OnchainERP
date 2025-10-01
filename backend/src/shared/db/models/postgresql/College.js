@@ -35,7 +35,7 @@ const College = sequelize.define('College', {
   },
   affiliatedUniversity: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true  // Optional - some colleges are autonomous
   },
   collegeType: {
     type: DataTypes.ENUM('Government', 'Private', 'Autonomous', 'Deemed'),
@@ -89,33 +89,85 @@ const College = sequelize.define('College', {
   },
   website: {
     type: DataTypes.STRING,
+    allowNull: true,  // Optional
     validate: {
       isUrl: true
     }
   },
   fax: {
-    type: DataTypes.STRING
+    type: DataTypes.STRING,
+    allowNull: true  // Optional
   },
   
-  // Infrastructure
+  // Branding & Visual Identity
+  logo: {
+    type: DataTypes.STRING,  // URL or file path
+    allowNull: true
+  },
+  primaryColor: {
+    type: DataTypes.STRING(7),  // Hex color code
+    defaultValue: '#2563eb',
+    validate: {
+      is: /^#[0-9A-Fa-f]{6}$/
+    }
+  },
+  secondaryColor: {
+    type: DataTypes.STRING(7),  // Hex color code
+    defaultValue: '#4b5563',
+    validate: {
+      is: /^#[0-9A-Fa-f]{6}$/
+    }
+  },
+  accentColor: {
+    type: DataTypes.STRING(7),  // Hex color code
+    defaultValue: '#059669',
+    validate: {
+      is: /^#[0-9A-Fa-f]{6}$/
+    }
+  },
+  backgroundColor: {
+    type: DataTypes.STRING(7),  // Hex color code
+    defaultValue: '#f9fafb',
+    validate: {
+      is: /^#[0-9A-Fa-f]{6}$/
+    }
+  },
+  motto: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  vision: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  mission: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  
+  // Infrastructure (Optional - not required for basic operations)
   campusArea: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
+    allowNull: true,
     comment: 'Campus area in acres'
   },
   totalBuildings: {
-    type: DataTypes.INTEGER
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   totalClassrooms: {
-    type: DataTypes.INTEGER
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   totalLaboratories: {
-    type: DataTypes.INTEGER
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   
-  // Library details
+  // Library details (Optional)
   libraryTotalBooks: {
-    type: DataTypes.INTEGER
+    type: DataTypes.INTEGER,
+    allowNull: true
   },
   libraryDigitalResources: {
     type: DataTypes.BOOLEAN,
@@ -123,50 +175,49 @@ const College = sequelize.define('College', {
   },
   libraryArea: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     comment: 'Library area in sq ft'
   },
   
   // Admin reference
   adminId: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'users',
       key: 'id'
     }
   },
   
-  // Accreditation
+  // Accreditation (Optional - can be added later)
   naacGrade: {
-    type: DataTypes.ENUM('A++', 'A+', 'A', 'B++', 'B+', 'B', 'C', 'Not Accredited')
+    type: DataTypes.ENUM('A++', 'A+', 'A', 'B++', 'B+', 'B', 'C', 'Not Accredited'),
+    allowNull: true
   },
   naacValidUntil: {
-    type: DataTypes.DATE
+    type: DataTypes.DATE,
+    allowNull: true
   },
   nbaAccredited: {
     type: DataTypes.BOOLEAN,
-    defaultValue: false
+    defaultValue: false,
+    allowNull: true
   },
   nbaValidUntil: {
-    type: DataTypes.DATE
+    type: DataTypes.DATE,
+    allowNull: true
   },
   
-  // Academic year settings
-  academicStartMonth: {
-    type: DataTypes.INTEGER,
-    defaultValue: 7,
-    validate: {
-      min: 1,
-      max: 12
-    }
+  // Profile completion tracking
+  profileCompleted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Indicates if college profile setup is complete'
   },
-  academicEndMonth: {
+  setupStep: {
     type: DataTypes.INTEGER,
-    defaultValue: 6,
-    validate: {
-      min: 1,
-      max: 12
-    }
+    defaultValue: 1,
+    comment: 'Current setup step (1-5): 1=Basic Info, 2=Branding, 3=Infrastructure, 4=Accreditation, 5=Complete'
   },
   
   isActive: {
@@ -180,8 +231,39 @@ const College = sequelize.define('College', {
     { fields: ['shortName'] },
     { fields: ['addressCity', 'addressState'] },
     { fields: ['collegeType'] },
-    { fields: ['adminId'] }
+    { fields: ['adminId'] },
+    { fields: ['profileCompleted'] },
+    { fields: ['setupStep'] }
   ]
 });
+
+// Instance methods
+College.prototype.isSetupComplete = function() {
+  return this.profileCompleted && this.setupStep >= 5;
+};
+
+College.prototype.getRequiredFields = function() {
+  return [
+    'name', 'shortName', 'establishedYear', 'collegeType', 'registrationNumber',
+    'addressStreet', 'addressCity', 'addressState', 'addressPincode', 'addressCountry',
+    'phone', 'email', 'adminId'
+  ];
+};
+
+College.prototype.validateRequiredFields = function() {
+  const required = this.getRequiredFields();
+  const missing = [];
+  
+  required.forEach(field => {
+    if (!this[field] || this[field] === '') {
+      missing.push(field);
+    }
+  });
+  
+  return {
+    isValid: missing.length === 0,
+    missingFields: missing
+  };
+};
 
 module.exports = College;

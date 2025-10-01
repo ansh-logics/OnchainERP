@@ -6,7 +6,8 @@ const {
   getColleges,
   addDepartment,
   getCollegeDepartments,
-  getCollegeStats
+  getCollegeStats,
+  getCollegeSetupStatus
 } = require('../controllers/collegeController');
 
 const { protect, authorize } = require('../../shared/middleware/auth');
@@ -36,5 +37,10 @@ router
 router
   .route('/:id/stats')
   .get(authorize('admin', 'super_admin'), getCollegeStats);
+
+// College setup status route
+router
+  .route('/setup-status')
+  .get(authorize('admin', 'super_admin'), getCollegeSetupStatus);
 
 module.exports = router;

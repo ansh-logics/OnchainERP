@@ -17,7 +17,17 @@ import {
   UserCheck,
   ClipboardList,
   BookOpen,
-  Book
+  Book,
+  Calendar,
+  Upload,
+  Shield,
+  RefreshCw,
+  School,
+  MapPin,
+  BedDouble,
+  Library,
+  CalendarCheck,
+  Import
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -27,7 +37,14 @@ interface SidebarProps {
   userRole: UserRole;
 }
 
-const getNavigationItems = (role: UserRole) => {
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: any;
+  category?: string;
+}
+
+const getNavigationItems = (role: UserRole): NavigationItem[] => {
   const baseItems = [
     { name: "Dashboard", href: `/${role}/dashboard`, icon: Home },
     { name: "Profile", href: `/${role}/profile`, icon: Users },
@@ -49,7 +66,7 @@ const getNavigationItems = (role: UserRole) => {
         { name: "Notifications", href: "/notifications", icon: Bell },
       ];
     
-    case 'staff':
+    case 'faculty':
       return [
         { name: "Dashboard", href: "/staff/dashboard", icon: Home },
         { name: "Admissions", href: "/staff/admissions", icon: UserCheck },
@@ -62,10 +79,31 @@ const getNavigationItems = (role: UserRole) => {
     case 'admin':
       return [
         { name: "Dashboard", href: "/admin/dashboard", icon: Home },
-        { name: "User Management", href: "/admin/users", icon: Users },
-        { name: "Reports", href: "/admin/reports", icon: BarChart3 },
-        { name: "Audit Logs", href: "/admin/logs", icon: FileText },
-        { name: "Settings", href: "/settings", icon: Settings },
+        
+        // SETUP & CONFIGURATION
+        { name: "College Profile", href: "/admin/college-profile", icon: School, category: "Setup & Configuration" },
+        { name: "Academic Calendar", href: "/admin/academic-calendar", icon: Calendar, category: "Setup & Configuration" },
+        { name: "Department Management", href: "/admin/departments", icon: Building, category: "Setup & Configuration" },
+        { name: "Fee Structure", href: "/admin/fee-structure", icon: DollarSign, category: "Setup & Configuration" },
+        { name: "Hostel Configuration", href: "/admin/hostel-config", icon: BedDouble, category: "Setup & Configuration" },
+
+        // USER MANAGEMENT  
+        { name: "Bulk Import (CSV)", href: "/admin/bulk-import", icon: Upload, category: "User Management" },
+        { name: "Manual Add User", href: "/admin/add-user", icon: UserCheck, category: "User Management" },
+        { name: "User Permissions", href: "/admin/permissions", icon: Shield, category: "User Management" },
+        { name: "Reset Passwords", href: "/admin/reset-passwords", icon: RefreshCw, category: "User Management" },
+
+        // MODULE MANAGEMENT
+        { name: "Admissions", href: "/admin/admissions", icon: GraduationCap, category: "Module Management" },
+        { name: "Fees & Payments", href: "/admin/fees-payments", icon: CreditCard, category: "Module Management" },
+        { name: "Hostel Allocation", href: "/admin/hostel-allocation", icon: Building, category: "Module Management" },
+        { name: "Exam Scheduling", href: "/admin/exam-scheduling", icon: ClipboardList, category: "Module Management" },
+        { name: "Library Management", href: "/admin/library-management", icon: Library, category: "Module Management" },
+
+        // REPORTS & MONITORING
+        { name: "Reports", href: "/admin/reports", icon: BarChart3, category: "Reports & Monitoring" },
+        { name: "System Logs", href: "/admin/logs", icon: FileText, category: "Reports & Monitoring" },
+        { name: "Notifications", href: "/notifications", icon: Bell, category: "Reports & Monitoring" },
       ];
     
     default:
@@ -93,24 +131,157 @@ export function Sidebar({ userRole }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 p-4">
-        {navigationItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link key={item.name} href={item.href}>
-              <Button
-                variant={isActive ? "default" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3 h-11",
-                  isActive && "bg-primary text-primary-foreground"
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.name}
-              </Button>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
+        {userRole === 'admin' ? (
+          // Grouped admin navigation
+          <>
+            {/* Dashboard - standalone */}
+            {navigationItems.filter(item => !item.category).map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link key={item.name} href={item.href}>
+                  <Button
+                    variant={isActive ? "default" : "ghost"}
+                    className={cn(
+                      "w-full justify-start gap-3 h-10 mb-4",
+                      isActive && "bg-primary text-primary-foreground"
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.name}
+                  </Button>
+                </Link>
+              );
+            })}
+
+            {/* Setup & Configuration */}
+            <div className="mb-6">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                <Settings className="h-3 w-3" />
+                Setup & Configuration
+              </h3>
+              <div className="space-y-1">
+                {navigationItems.filter(item => item.category === "Setup & Configuration").map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "default" : "ghost"}
+                        className={cn(
+                          "w-full justify-start gap-3 h-9 text-sm",
+                          isActive && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* User Management */}
+            <div className="mb-6">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                <Users className="h-3 w-3" />
+                User Management
+              </h3>
+              <div className="space-y-1">
+                {navigationItems.filter(item => item.category === "User Management").map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "default" : "ghost"}
+                        className={cn(
+                          "w-full justify-start gap-3 h-9 text-sm",
+                          isActive && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Module Management */}
+            <div className="mb-6">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                <BookOpen className="h-3 w-3" />
+                Module Management
+              </h3>
+              <div className="space-y-1">
+                {navigationItems.filter(item => item.category === "Module Management").map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "default" : "ghost"}
+                        className={cn(
+                          "w-full justify-start gap-3 h-9 text-sm",
+                          isActive && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Reports & Monitoring */}
+            <div className="mb-6">
+              <h3 className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                <BarChart3 className="h-3 w-3" />
+                Reports & Monitoring
+              </h3>
+              <div className="space-y-1">
+                {navigationItems.filter(item => item.category === "Reports & Monitoring").map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <Link key={item.name} href={item.href}>
+                      <Button
+                        variant={isActive ? "default" : "ghost"}
+                        className={cn(
+                          "w-full justify-start gap-3 h-9 text-sm",
+                          isActive && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : (
+          // Regular navigation for other roles
+          navigationItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link key={item.name} href={item.href}>
+                <Button
+                  variant={isActive ? "default" : "ghost"}
+                  className={cn(
+                    "w-full justify-start gap-3 h-11",
+                    isActive && "bg-primary text-primary-foreground"
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.name}
+                </Button>
+              </Link>
+            );
+          })
+        )}
       </nav>
 
       {/* Footer */}

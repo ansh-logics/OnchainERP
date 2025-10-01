@@ -44,6 +44,14 @@ const User = sequelize.define('User', {
     unique: true,
     allowNull: true
   },
+  collegeId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'colleges',
+      key: 'id'
+    }
+  },
   phone: {
     type: DataTypes.STRING(15),
     validate: {
