@@ -17,11 +17,35 @@ const ErrorResponse = require('../../shared/utils/errorResponse');
 // @access  Private/Admin
 const getDashboardAnalytics = async (req, res, next) => {
   try {
-    // Get user's college ID
-    const collegeId = req.user.collegeId;
+    // Get user's college ID - try multiple sources
+    let collegeId = req.user.collegeId;
     
+    // If collegeId is null, try to get it from the college association
+    if (!collegeId && req.user.college) {
+      collegeId = req.user.college.id;
+    }
+    
+    // If still no collegeId, check if user is super_admin (they might access multiple colleges)
     if (!collegeId) {
-      return next(new ErrorResponse('User not associated with any college', 400));
+      if (req.user.role === 'super_admin') {
+        // For super_admin, we could return aggregate data or ask them to specify a college
+        return res.status(200).json({
+          success: true,
+          data: {
+            totalStudents: 0,
+            totalFaculty: 0,
+            totalDepartments: 0,
+            revenue: 0,
+            hostelOccupancy: 0,
+            activeAlerts: 0,
+            pendingFees: 0,
+            upcomingExams: 0,
+            message: 'Super admin - please select a specific college to view analytics'
+          }
+        });
+      } else {
+        return next(new ErrorResponse('User not associated with any college. Please contact administrator to assign you to a college.', 400));
+      }
     }
 
     // Get all counts in parallel for better performance
@@ -58,11 +82,12 @@ const getDashboardAnalytics = async (req, res, next) => {
         } 
       }),
       
-      // Revenue calculation (sum of all completed transactions)
+      // Revenue calculation (sum of all paid transactions)
       Transaction.sum('amount', {
         where: {
           collegeId,
-          status: 'completed',
+          status: 'paid',
+          type: 'income', // Only count income transactions
           createdAt: {
             [Op.gte]: new Date(new Date().getFullYear(), 3, 1) // Current academic year (April 1st)
           }
@@ -73,16 +98,20 @@ const getDashboardAnalytics = async (req, res, next) => {
       Promise.all([
         HostelAllocation.count({
           where: {
-            collegeId,
-            status: 'active'
-          }
-        }),
-        HostelAllocation.count({
+            status: ['allocated', 'checked_in'],
+            isActive: true
+          },
           include: [{
             model: Hostel,
             as: 'hostel',
             where: { collegeId }
           }]
+        }),
+        Hostel.sum('totalCapacity', {
+          where: { 
+            collegeId,
+            isActive: true 
+          }
         })
       ]),
       
@@ -106,8 +135,8 @@ const getDashboardAnalytics = async (req, res, next) => {
     ]);
 
     // Calculate hostel occupancy percentage
-    const [occupiedRooms, totalCapacity] = hostelData;
-    const hostelOccupancy = totalCapacity > 0 ? Math.round((occupiedRooms / totalCapacity) * 100) : 0;
+    const [occupiedBeds, totalCapacity] = hostelData;
+    const hostelOccupancy = totalCapacity > 0 ? Math.round((occupiedBeds / totalCapacity) * 100) : 0;
 
     // Mock active alerts count (you can implement proper alerts system later)
     const activeAlerts = 4;

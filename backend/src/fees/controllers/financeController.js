@@ -1,19 +1,18 @@
 const { Transaction, Student, User } = require('../../shared/db/models');
+const { Op } = require('sequelize');
 const asyncHandler = require('express-async-handler');
 const ErrorResponse = require('../../shared/utils/errorResponse');
 const LoggingService = require('../../shared/services/LoggingService');
 
 // @desc    Get all transactions
 // @route   GET /api/finance/transactions
-// @access  Private (Admin, Cashier)
+// @access  Private (Admin, Cashier, Faculty)
 const getTransactions = asyncHandler(async (req, res) => {
   const {
     type,
     status,
     category,
     studentId,
-    academicYear,
-    semester,
     startDate,
     endDate,
     page = 1,
@@ -21,61 +20,83 @@ const getTransactions = asyncHandler(async (req, res) => {
     search
   } = req.query;
 
-  // Build filter object
-  const filter = { college: req.user.college };
+  // Build where clause for Sequelize
+  const whereClause = { collegeId: req.user.collegeId };
 
-  if (type) filter.type = type;
-  if (status) filter.status = status;
-  if (category) filter.category = category;
-  if (studentId) filter.student = studentId;
-  if (academicYear) filter.academicYear = academicYear;
-  if (semester) filter.semester = semester;
+  if (type) whereClause.type = type;
+  if (status) whereClause.status = status;
+  if (category) whereClause.category = category;
+  if (studentId) whereClause.studentId = studentId;
 
   // Date range filter
   if (startDate || endDate) {
-    filter.createdAt = {};
-    if (startDate) filter.createdAt.$gte = new Date(startDate);
-    if (endDate) filter.createdAt.$lte = new Date(endDate);
+    whereClause.createdAt = {};
+    if (startDate) whereClause.createdAt[Op.gte] = new Date(startDate);
+    if (endDate) whereClause.createdAt[Op.lte] = new Date(endDate);
   }
-
-  // Build query
-  let query = Transaction.find(filter)
-    .populate('student', 'name enrollmentNumber email phone')
-    .populate('createdBy', 'name email')
-    .populate('updatedBy', 'name email')
-    .populate('approvedBy', 'name email')
-    .sort({ createdAt: -1 });
 
   // Search functionality
   if (search) {
-    const searchQuery = {
-      $or: [
-        { description: { $regex: search, $options: 'i' } },
-        { referenceNumber: { $regex: search, $options: 'i' } },
-        { notes: { $regex: search, $options: 'i' } }
-      ]
-    };
-    query = Transaction.find({ ...filter, ...searchQuery })
-      .populate('student', 'name enrollmentNumber email phone')
-      .populate('createdBy', 'name email')
-      .populate('updatedBy', 'name email')
-      .populate('approvedBy', 'name email')
-      .sort({ createdAt: -1 });
+    whereClause[Op.or] = [
+      { description: { [Op.iLike]: `%${search}%` } },
+      { referenceNumber: { [Op.iLike]: `%${search}%` } },
+      { notes: { [Op.iLike]: `%${search}%` } }
+    ];
   }
 
-  // Pagination
-  const skip = (page - 1) * limit;
-  const total = await Transaction.countDocuments({ ...filter, ...(search ? searchQuery : {}) });
-  
-  const transactions = await query.skip(skip).limit(parseInt(limit));
+  // Count total
+  const total = await Transaction.count({ where: whereClause });
+
+  // Get transactions with pagination
+  const transactions = await Transaction.findAll({
+    where: whereClause,
+    include: [
+      {
+        model: Student,
+        as: 'student',
+        attributes: ['id', 'enrollmentNumber'],
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        }]
+      }
+    ],
+    order: [['createdAt', 'DESC']],
+    limit: parseInt(limit),
+    offset: (parseInt(page) - 1) * parseInt(limit)
+  });
+
+  // Transform data for frontend
+  const transformedTransactions = transactions.map(t => ({
+    id: t.id,
+    amount: t.amount,
+    type: t.type,
+    category: t.category,
+    status: t.status,
+    description: t.description,
+    dueDate: t.dueDate,
+    paidDate: t.paidDate,
+    paymentMethod: t.paymentMethod,
+    referenceNumber: t.referenceNumber,
+    notes: t.notes,
+    student: t.student ? {
+      id: t.student.id,
+      name: t.student.user?.name || 'N/A',
+      enrollmentNumber: t.student.enrollmentNumber,
+      email: t.student.user?.email
+    } : null,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt
+  }));
 
   res.status(200).json({
     success: true,
-    count: transactions.length,
+    count: transformedTransactions.length,
     total,
     page: parseInt(page),
-    pages: Math.ceil(total / limit),
-    data: transactions
+    pages: Math.ceil(total / parseInt(limit)),
+    data: transformedTransactions
   });
 });
 
@@ -84,13 +105,23 @@ const getTransactions = asyncHandler(async (req, res) => {
 // @access  Private (Admin, Cashier)
 const getTransaction = asyncHandler(async (req, res) => {
   const transaction = await Transaction.findOne({
-    _id: req.params.id,
-    college: req.user.college
-  })
-    .populate('student', 'name enrollmentNumber email phone')
-    .populate('createdBy', 'name email')
-    .populate('updatedBy', 'name email')
-    .populate('approvedBy', 'name email');
+    where: {
+      id: req.params.id,
+      collegeId: req.user.collegeId
+    },
+    include: [
+      {
+        model: Student,
+        as: 'student',
+        attributes: ['id', 'enrollmentNumber'],
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        }]
+      }
+    ]
+  });
 
   if (!transaction) {
     return res.status(404).json({
@@ -109,15 +140,16 @@ const getTransaction = asyncHandler(async (req, res) => {
 // @route   POST /api/finance/transactions
 // @access  Private (Admin, Cashier)
 const createTransaction = asyncHandler(async (req, res) => {
-  // Add college and creator to request body
-  req.body.college = req.user.college;
-  req.body.createdBy = req.user._id;
+  // Add college to request body
+  req.body.collegeId = req.user.collegeId;
 
   // Validate student exists for fee transactions
-  if (req.body.student) {
+  if (req.body.studentId) {
     const student = await Student.findOne({
-      _id: req.body.student,
-      college: req.user.college
+      where: {
+        id: req.body.studentId,
+        collegeId: req.user.collegeId
+      }
     });
 
     if (!student) {
@@ -130,15 +162,41 @@ const createTransaction = asyncHandler(async (req, res) => {
 
   const transaction = await Transaction.create(req.body);
 
-  // Populate the created transaction
-  await transaction.populate([
-    { path: 'student', select: 'name enrollmentNumber email phone' },
-    { path: 'createdBy', select: 'name email' }
-  ]);
+  // Fetch with associations
+  const fullTransaction = await Transaction.findByPk(transaction.id, {
+    include: [
+      {
+        model: Student,
+        as: 'student',
+        attributes: ['id', 'enrollmentNumber'],
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        }]
+      }
+    ]
+  });
+
+  // Log the action
+  await LoggingService.logUserAction(
+    'create_transaction',
+    req.user.id,
+    {
+      transactionId: transaction.id,
+      amount: transaction.amount,
+      type: transaction.type
+    },
+    {
+      userRole: req.user.role,
+      collegeId: req.user.collegeId,
+      ip: req.ip
+    }
+  );
 
   res.status(201).json({
     success: true,
-    data: transaction
+    data: fullTransaction
   });
 });
 
@@ -147,8 +205,10 @@ const createTransaction = asyncHandler(async (req, res) => {
 // @access  Private (Admin, Cashier)
 const updateTransaction = asyncHandler(async (req, res) => {
   let transaction = await Transaction.findOne({
-    _id: req.params.id,
-    college: req.user.college
+    where: {
+      id: req.params.id,
+      collegeId: req.user.collegeId
+    }
   });
 
   if (!transaction) {
@@ -158,33 +218,28 @@ const updateTransaction = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check if user can update this transaction
-  const canUpdate = req.user.role === 'admin' || 
-                   (req.user.role === 'cashier' && transaction.createdBy.toString() === req.user._id.toString());
+  // Update transaction
+  await transaction.update(req.body);
 
-  if (!canUpdate) {
-    return res.status(403).json({
-      success: false,
-      message: 'Not authorized to update this transaction'
-    });
-  }
-
-  // Add updater info
-  req.body.updatedBy = req.user._id;
-
-  transaction = await Transaction.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { new: true, runValidators: true }
-  ).populate([
-    { path: 'student', select: 'name enrollmentNumber email phone' },
-    { path: 'createdBy', select: 'name email' },
-    { path: 'updatedBy', select: 'name email' }
-  ]);
+  // Fetch updated with associations
+  const updatedTransaction = await Transaction.findByPk(transaction.id, {
+    include: [
+      {
+        model: Student,
+        as: 'student',
+        attributes: ['id', 'enrollmentNumber'],
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        }]
+      }
+    ]
+  });
 
   res.status(200).json({
     success: true,
-    data: transaction
+    data: updatedTransaction
   });
 });
 
@@ -193,8 +248,10 @@ const updateTransaction = asyncHandler(async (req, res) => {
 // @access  Private (Admin only)
 const deleteTransaction = asyncHandler(async (req, res) => {
   const transaction = await Transaction.findOne({
-    _id: req.params.id,
-    college: req.user.college
+    where: {
+      id: req.params.id,
+      collegeId: req.user.collegeId
+    }
   });
 
   if (!transaction) {
@@ -204,15 +261,12 @@ const deleteTransaction = asyncHandler(async (req, res) => {
     });
   }
 
-  // Only admin can delete transactions
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Only admins can delete transactions'
-    });
+  // Soft delete by updating isActive
+  if (transaction.isActive !== undefined) {
+    await transaction.update({ isActive: false });
+  } else {
+    await transaction.destroy();
   }
-
-  await transaction.deleteOne();
 
   res.status(200).json({
     success: true,
@@ -220,22 +274,15 @@ const deleteTransaction = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Approve/Reject transaction
+// @desc    Approve transaction
 // @route   PATCH /api/finance/transactions/:id/approve
 // @access  Private (Admin only)
 const approveTransaction = asyncHandler(async (req, res) => {
-  const { approvalStatus, notes } = req.body;
-
-  if (!['approved', 'rejected'].includes(approvalStatus)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid approval status'
-    });
-  }
-
   const transaction = await Transaction.findOne({
-    _id: req.params.id,
-    college: req.user.college
+    where: {
+      id: req.params.id,
+      collegeId: req.user.collegeId
+    }
   });
 
   if (!transaction) {
@@ -245,126 +292,80 @@ const approveTransaction = asyncHandler(async (req, res) => {
     });
   }
 
-  transaction.approvalStatus = approvalStatus;
-  transaction.approvedBy = req.user._id;
-  transaction.approvedAt = new Date();
-  if (notes) transaction.notes = notes;
+  if (transaction.status === 'paid') {
+    return res.status(400).json({
+      success: false,
+      message: 'Transaction already approved'
+    });
+  }
 
-  await transaction.save();
-
-  await transaction.populate([
-    { path: 'student', select: 'name enrollmentNumber email phone' },
-    { path: 'createdBy', select: 'name email' },
-    { path: 'approvedBy', select: 'name email' }
-  ]);
+  // Update transaction status
+  await transaction.update({
+    status: 'paid',
+    paidDate: new Date()
+  });
 
   res.status(200).json({
     success: true,
+    message: 'Transaction approved successfully',
     data: transaction
   });
 });
 
 // @desc    Get financial summary
 // @route   GET /api/finance/summary
-// @access  Private (Admin, Cashier)
+// @access  Private (Admin, Cashier, Faculty)
 const getFinancialSummary = asyncHandler(async (req, res) => {
-  const { startDate, endDate, academicYear } = req.query;
+  const collegeId = req.user.collegeId;
 
-  // Build filter
-  const filter = { college: req.user.college };
-  
-  if (academicYear) filter.academicYear = academicYear;
-  
-  if (startDate || endDate) {
-    filter.createdAt = {};
-    if (startDate) filter.createdAt.$gte = new Date(startDate);
-    if (endDate) filter.createdAt.$lte = new Date(endDate);
-  }
-
-  // Get summary using static method
-  const summary = await Transaction.getFinancialSummary(req.user.college, filter);
-
-  // Get pending fees by category
-  const pendingFees = await Transaction.aggregate([
-    {
-      $match: {
-        college: req.user.college,
-        type: 'income',
-        status: { $in: ['pending', 'overdue'] },
-        ...(academicYear && { academicYear })
-      }
-    },
-    {
-      $group: {
-        _id: '$category',
-        totalAmount: { $sum: '$amount' },
-        count: { $sum: 1 },
-        overdue: {
-          $sum: {
-            $cond: [{ $eq: ['$status', 'overdue'] }, '$amount', 0]
-          }
-        }
-      }
+  // Get all transactions for the college
+  const allTransactions = await Transaction.findAll({
+    where: {
+      collegeId,
+      type: 'income' // Only count income transactions for fees
     }
-  ]);
+  });
 
-  // Get monthly trends
-  const monthlyTrends = await Transaction.aggregate([
-    {
-      $match: {
-        college: req.user.college,
-        createdAt: {
-          $gte: new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1)
-        }
-      }
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$createdAt' },
-          month: { $month: '$createdAt' },
-          type: '$type'
-        },
-        totalAmount: { $sum: '$amount' },
-        count: { $sum: 1 }
-      }
-    },
-    { $sort: { '_id.year': 1, '_id.month': 1 } }
-  ]);
+  // Calculate summary
+  const totalCollected = allTransactions
+    .filter(t => t.status === 'paid')
+    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+
+  const totalPending = allTransactions
+    .filter(t => t.status === 'pending')
+    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+
+  const totalOverdue = allTransactions
+    .filter(t => t.status === 'overdue')
+    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+
+  const collectionRate = (totalCollected + totalPending) > 0
+    ? Math.round((totalCollected / (totalCollected + totalPending)) * 100)
+    : 0;
 
   res.status(200).json({
     success: true,
     data: {
-      summary,
-      pendingFees,
-      monthlyTrends
+      totalCollected,
+      totalPending,
+      totalOverdue,
+      collectionRate
     }
   });
 });
 
-// @desc    Get student fee status
+// @desc    Get student fees
 // @route   GET /api/finance/students/:studentId/fees
-// @access  Private (Admin, Cashier, Student themselves)
+// @access  Private
 const getStudentFees = asyncHandler(async (req, res) => {
   const { studentId } = req.params;
-  const { academicYear } = req.query;
 
-  // Check if user can access this student's fees
-  const canAccess = req.user.role === 'admin' || 
-                   req.user.role === 'cashier' || 
-                   (req.user.role === 'student' && req.user.studentId === studentId);
-
-  if (!canAccess) {
-    return res.status(403).json({
-      success: false,
-      message: 'Not authorized to access these fee records'
-    });
-  }
-
-  // Find student
+  // Verify student exists and belongs to user's college
   const student = await Student.findOne({
-    _id: studentId,
-    college: req.user.college
+    where: {
+      id: studentId,
+      collegeId: req.user.collegeId
+    }
   });
 
   if (!student) {
@@ -374,27 +375,37 @@ const getStudentFees = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get fee transactions
-  const fees = await Transaction.getStudentFeeStatus(studentId, academicYear);
+  // Get all transactions for this student
+  const transactions = await Transaction.findAll({
+    where: {
+      studentId,
+      type: 'income'
+    },
+    order: [['createdAt', 'DESC']]
+  });
 
-  // Calculate totals
-  const totalFees = fees.reduce((sum, fee) => sum + fee.amount, 0);
-  const paidFees = fees.filter(fee => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const pendingFees = fees.filter(fee => fee.status === 'pending').reduce((sum, fee) => sum + fee.amount, 0);
-  const overdueFees = fees.filter(fee => fee.status === 'overdue').reduce((sum, fee) => sum + fee.amount, 0);
+  // Calculate summary
+  const totalFees = transactions.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+  const paidAmount = transactions
+    .filter(t => t.status === 'paid')
+    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+  const pendingAmount = transactions
+    .filter(t => t.status === 'pending' || t.status === 'overdue')
+    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
 
   res.status(200).json({
     success: true,
     data: {
-      student,
-      fees,
+      student: {
+        id: student.id,
+        enrollmentNumber: student.enrollmentNumber
+      },
       summary: {
         totalFees,
-        paidFees,
-        pendingFees,
-        overdueFees,
-        paidPercentage: totalFees > 0 ? (paidFees / totalFees) * 100 : 0
-      }
+        paidAmount,
+        pendingAmount
+      },
+      transactions
     }
   });
 });
@@ -407,11 +418,13 @@ const submitFeePayment = asyncHandler(async (req, res) => {
 
   // Find the fee transaction
   const transaction = await Transaction.findOne({
-    _id: transactionId,
-    student: req.user.studentId,
-    college: req.user.college,
-    type: 'income',
-    status: { $in: ['pending', 'overdue'] }
+    where: {
+      id: transactionId,
+      studentId: req.user.studentId,
+      collegeId: req.user.collegeId,
+      type: 'income',
+      status: { [Op.in]: ['pending', 'overdue'] }
+    }
   });
 
   if (!transaction) {
@@ -422,19 +435,13 @@ const submitFeePayment = asyncHandler(async (req, res) => {
   }
 
   // Update transaction with payment submission
-  transaction.paymentMethod = paymentMethod;
-  transaction.status = 'paid'; // Will be pending approval
-  transaction.paidDate = new Date();
-  transaction.approvalStatus = 'pending_approval';
-  transaction.notes = notes || transaction.notes;
-  
-  if (transactionRef) {
-    transaction.referenceNumber = transactionRef;
-  }
-
-  await transaction.save();
-
-  await transaction.populate('student', 'name enrollmentNumber email phone');
+  await transaction.update({
+    paymentMethod,
+    status: 'paid',
+    paidDate: new Date(),
+    referenceNumber: transactionRef || transaction.referenceNumber,
+    notes: notes || transaction.notes
+  });
 
   res.status(200).json({
     success: true,

@@ -1,4 +1,4 @@
-const { College, Department, User } = require('../../shared/db/models');
+const { College, Department, User, Student, Faculty } = require('../../shared/db/models');
 const { SystemLog } = require('../../shared/db/models');
 const ErrorResponse = require('../../shared/utils/errorResponse');
 const LoggingService = require('../../shared/services/LoggingService');
@@ -380,34 +380,35 @@ const getCollegeStats = async (req, res, next) => {
       return next(new ErrorResponse('Access denied', 403));
     }
 
-    // Get statistics using associations
-    const stats = await College.findByPk(req.params.id, {
-      include: [
-        {
-          model: Department,
-          as: 'departments',
-          where: { isActive: true },
-          required: false
-        },
-        {
-          model: User,
-          as: 'students',
-          where: { role: 'student', isActive: true },
-          required: false
-        },
-        {
-          model: User,
-          as: 'faculty',
-          where: { role: 'faculty', isActive: true },
-          required: false
+    // Get statistics using direct queries instead of associations
+    const [totalDepartments, totalStudents, totalFaculty] = await Promise.all([
+      // Count departments
+      Department.count({
+        where: { 
+          collegeId: req.params.id,
+          isActive: true 
         }
-      ]
-    });
+      }),
+      
+      // Count students
+      Student.count({
+        where: { 
+          collegeId: req.params.id
+        }
+      }),
+      
+      // Count faculty
+      Faculty.count({
+        where: { 
+          collegeId: req.params.id
+        }
+      })
+    ]);
 
     const statistics = {
-      totalDepartments: stats.departments?.length || 0,
-      totalStudents: stats.students?.length || 0,
-      totalFaculty: stats.faculty?.length || 0,
+      totalDepartments: totalDepartments || 0,
+      totalStudents: totalStudents || 0,
+      totalFaculty: totalFaculty || 0,
       establishedYear: college.establishedYear,
       campusArea: college.campusArea,
       totalBuildings: college.totalBuildings,
@@ -565,61 +566,97 @@ const getCollegeDepartments = async (req, res, next) => {
 // @access  Private/Admin
 const getCollegeSetupStatus = async (req, res, next) => {
   try {
-    // Get user's college ID
-    const collegeId = req.user.collegeId;
+    // Get user's college ID - try multiple sources
+    let collegeId = req.user.collegeId;
+    
+    // If collegeId is null, try to get it from the college association
+    if (!collegeId && req.user.college) {
+      collegeId = req.user.college.id;
+    }
     
     if (!collegeId) {
-      return next(new ErrorResponse('User not associated with any college', 400));
+      return next(new ErrorResponse('User not associated with any college. Please contact administrator to assign you to a college.', 400));
     }
 
-    // Get college with admin details
-    const college = await College.findByPk(collegeId, {
-      include: [
-        {
-          model: User,
-          as: 'admin',
-          attributes: ['id', 'name', 'email', 'phone']
-        }
-      ]
-    });
+    // Get college details (without associations to avoid query complexity)
+    const college = await College.findByPk(collegeId);
 
     if (!college) {
       return next(new ErrorResponse('College not found', 404));
     }
 
-    // Determine missing fields for profile completion
-    const requiredProfileFields = ['logo', 'motto', 'vision', 'mission'];
-    const missingFields = [];
+    // Step 1: Check basic registration (already done if college exists)
+    const basicInfoComplete = !!(college.name && college.shortName && college.email);
 
-    requiredProfileFields.forEach(field => {
-      if (!college[field] || college[field] === '') {
-        missingFields.push(field);
-      }
-    });
+    // Step 2: Check branding fields (logo, colors, motto)
+    const brandingComplete = !!(college.logo && college.motto);
+    
+    // Step 3: Check mission and vision
+    const missionVisionComplete = !!(college.vision && college.mission);
+    
+    // Step 4: Check infrastructure details (optional but recommended)
+    const infrastructureComplete = !!(college.campusArea && college.totalBuildings);
 
-    // If no required profile fields are missing, mark profile as complete
-    const profileCompleted = missingFields.length === 0;
+    // Determine overall profile completion
+    const profileCompleted = basicInfoComplete && brandingComplete && missionVisionComplete;
+    
+    // Calculate setup step based on completion
+    let currentStep = 1;
+    if (basicInfoComplete) currentStep = 2;
+    if (brandingComplete) currentStep = 3;
+    if (missionVisionComplete) currentStep = 4;
+    if (infrastructureComplete) currentStep = 5;
+    if (profileCompleted) currentStep = 5;
+
+    // Determine missing fields for each category
+    const missingFields = {
+      branding: [],
+      missionVision: [],
+      infrastructure: []
+    };
+
+    if (!college.logo) missingFields.branding.push('logo');
+    if (!college.motto) missingFields.branding.push('motto');
+    if (!college.vision) missingFields.missionVision.push('vision');
+    if (!college.mission) missingFields.missionVision.push('mission');
+    if (!college.campusArea) missingFields.infrastructure.push('campusArea');
+    if (!college.totalBuildings) missingFields.infrastructure.push('totalBuildings');
 
     // Update college if profile completion status changed
-    if (college.profileCompleted !== profileCompleted) {
+    if (college.profileCompleted !== profileCompleted || college.setupStep !== currentStep) {
       await college.update({ 
         profileCompleted,
-        setupStep: profileCompleted ? 5 : college.setupStep 
+        setupStep: currentStep 
       });
     }
 
     const setupStatus = {
-      profileCompleted: college.profileCompleted,
-      setupStep: college.setupStep,
+      isComplete: profileCompleted,
+      currentStep: currentStep,
+      steps: {
+        basicInfo: { complete: basicInfoComplete, step: 1 },
+        branding: { complete: brandingComplete, step: 2, missing: missingFields.branding },
+        missionVision: { complete: missionVisionComplete, step: 3, missing: missingFields.missionVision },
+        infrastructure: { complete: infrastructureComplete, step: 4, missing: missingFields.infrastructure }
+      },
       missingFields: missingFields,
       college: {
+        id: college.id,
         name: college.name,
         shortName: college.shortName,
         logo: college.logo,
+        motto: college.motto,
+        vision: college.vision,
+        mission: college.mission,
         primaryColor: college.primaryColor,
         secondaryColor: college.secondaryColor,
-        accentColor: college.accentColor
-      }
+        accentColor: college.accentColor,
+        campusArea: college.campusArea,
+        totalBuildings: college.totalBuildings
+      },
+      nextAction: !profileCompleted 
+        ? `Complete ${!brandingComplete ? 'branding' : !missionVisionComplete ? 'mission and vision' : 'profile'} setup` 
+        : 'All setup complete! You can now manage users and modules.'
     };
 
     res.status(200).json({

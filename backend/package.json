@@ -10,6 +10,9 @@
     "lint": "eslint .",
     "seed:import": "node src/utils/seeder.js -i",
     "seed:delete": "node src/utils/seeder.js -d",
+    "seed:college": "node scripts/seed-college-data.js",
+    "seed:clear": "node scripts/clear-database.js",
+    "seed:fresh": "npm run seed:clear && npm run seed:college",
     "db:setup": "node -e \"require('./src/config/database').connectDatabases()\"",
     "db:reset": "node -e \"require('./src/models/postgresql').sequelize.sync({force: true})\""
   },
@@ -30,7 +33,8 @@
     "pg": "^8.16.3",
     "sequelize": "^6.37.7",
     "sequelize-cli": "^6.6.3",
-    "swagger-ui-express": "^5.0.0"
+    "swagger-ui-express": "^5.0.0",
+    "googleapis": "^126.0.1"
   },
   "devDependencies": {
     "eslint": "^8.46.0",

@@ -19,13 +19,13 @@ const router = express.Router();
 // Protect all routes
 router.use(protect);
 
-// Finance summary - Admin and Cashier access
-router.get('/summary', authorize('admin', 'cashier'), getFinancialSummary);
+// Finance summary - Admin, Cashier, and Faculty (read-only) access
+router.get('/summary', authorize('admin', 'cashier', 'faculty'), getFinancialSummary);
 
 // Transaction routes
 router.route('/transactions')
-  .get(authorize('admin', 'cashier'), getTransactions)
-  .post(authorize('admin', 'cashier'), validateTransaction, createTransaction);
+  .get(authorize('admin', 'cashier', 'faculty'), getTransactions) // Faculty can view transactions
+  .post(authorize('admin', 'cashier'), validateTransaction, createTransaction); // Only admin/cashier can create
 
 router.route('/transactions/:id')
   .get(authorize('admin', 'cashier'), getTransaction)

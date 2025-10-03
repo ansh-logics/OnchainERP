@@ -45,9 +45,12 @@ interface NavigationItem {
 }
 
 const getNavigationItems = (role: UserRole): NavigationItem[] => {
+  // Map faculty role to staff for routing
+  const routeRole = role === 'faculty' ? 'staff' : role;
+  
   const baseItems = [
-    { name: "Dashboard", href: `/${role}/dashboard`, icon: Home },
-    { name: "Profile", href: `/${role}/profile`, icon: Users },
+    { name: "Dashboard", href: `/${routeRole}/dashboard`, icon: Home },
+    { name: "Profile", href: `/${routeRole}/profile`, icon: Users },
     { name: "Notifications", href: "/notifications", icon: Bell },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
@@ -69,6 +72,7 @@ const getNavigationItems = (role: UserRole): NavigationItem[] => {
     case 'faculty':
       return [
         { name: "Dashboard", href: "/staff/dashboard", icon: Home },
+        { name: "Attendance", href: "/staff/attendance", icon: CalendarCheck },
         { name: "Admissions", href: "/staff/admissions", icon: UserCheck },
         { name: "Fee Collection", href: "/staff/fees", icon: DollarSign },
         { name: "Hostel Management", href: "/staff/hostel", icon: Building },
@@ -88,8 +92,7 @@ const getNavigationItems = (role: UserRole): NavigationItem[] => {
         { name: "Hostel Configuration", href: "/admin/hostel-config", icon: BedDouble, category: "Setup & Configuration" },
 
         // USER MANAGEMENT  
-        { name: "Bulk Import (CSV)", href: "/admin/bulk-import", icon: Upload, category: "User Management" },
-        { name: "Manual Add User", href: "/admin/add-user", icon: UserCheck, category: "User Management" },
+        { name: "User Management", href: "/admin/users", icon: Users, category: "User Management" },
         { name: "User Permissions", href: "/admin/permissions", icon: Shield, category: "User Management" },
         { name: "Reset Passwords", href: "/admin/reset-passwords", icon: RefreshCw, category: "User Management" },
 

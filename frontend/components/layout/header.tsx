@@ -14,7 +14,8 @@ interface HeaderProps {
 const getRoleColor = (role: UserRole) => {
   switch (role) {
     case 'admin': return 'bg-red-100 text-red-800';
-    case 'staff': return 'bg-blue-100 text-blue-800';
+    case 'staff':
+    case 'faculty': return 'bg-blue-100 text-blue-800';
     case 'student': return 'bg-green-100 text-green-800';
     default: return 'bg-gray-100 text-gray-800';
   }
@@ -58,7 +59,7 @@ export function Header({ title }: HeaderProps) {
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-gray-500">{user.email}</p>
                   <Badge variant="secondary" className={getRoleColor(user.role as UserRole)}>
-                    {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                    {user.role === 'faculty' ? 'Staff' : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                   </Badge>
                 </div>
               </div>

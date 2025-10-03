@@ -87,6 +87,11 @@ const Transaction = sequelize.define('Transaction', {
     allowNull: false
   },
   
+  notes: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  
   // Academic details
   academicYear: {
     type: DataTypes.STRING

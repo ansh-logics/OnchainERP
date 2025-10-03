@@ -26,7 +26,27 @@ export default function HomePage() {
     console.log(user);
     if (user) {
       // Redirect to appropriate dashboard if already logged in
-      router.push(`/${user.role}/dashboard`);
+      let redirectPath = '/dashboard';
+      
+      switch (user.role) {
+        case 'admin':
+        case 'super_admin':
+          redirectPath = '/admin/dashboard';
+          break;
+        case 'student':
+          redirectPath = '/student/dashboard';
+          break;
+        case 'faculty':
+          redirectPath = '/staff/dashboard';
+          break;
+        case 'cashier':
+          redirectPath = '/cashier/dashboard';
+          break;
+        default:
+          redirectPath = '/dashboard';
+      }
+      
+      router.push(redirectPath);
     }
   }, [router]);
 

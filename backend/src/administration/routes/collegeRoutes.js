@@ -24,6 +24,11 @@ router
   .route('/')
   .get(authorize('super_admin'), getColleges);
 
+// College setup status route - MUST be before /:id route to avoid matching as ID
+router
+  .route('/setup-status')
+  .get(authorize('admin', 'super_admin'), getCollegeSetupStatus);
+
 router
   .route('/:id')
   .get(getCollege)
@@ -37,10 +42,5 @@ router
 router
   .route('/:id/stats')
   .get(authorize('admin', 'super_admin'), getCollegeStats);
-
-// College setup status route
-router
-  .route('/setup-status')
-  .get(authorize('admin', 'super_admin'), getCollegeSetupStatus);
 
 module.exports = router;

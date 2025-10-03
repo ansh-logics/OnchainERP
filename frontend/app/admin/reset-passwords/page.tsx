@@ -5,653 +5,689 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getCurrentUser } from "@/lib/auth";
 import { 
-  RefreshCw,
-  Search,
-  Filter,
-  Mail,
-  Phone,
-  Eye,
-  Download,
-  Upload,
-  Users,
-  Shield,
+  Key,
+  Users, 
   Clock,
   CheckCircle,
   XCircle,
+  Eye,
   AlertCircle,
-  Send,
-  Key,
-  Lock,
-  Unlock,
-  FileText,
-  Calendar
+  Loader2,
+  Copy,
+  Mail,
+  Phone,
+  Calendar,
+  User,
+  Shield,
+  RefreshCw,
+  Search,
+  Filter
 } from "lucide-react";
 
 interface PasswordResetRequest {
   id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userRole: string;
-  department: string;
-  requestType: 'self' | 'admin' | 'bulk';
-  requestDate: string;
-  status: 'pending' | 'sent' | 'completed' | 'expired';
-  resetToken?: string;
-  expiryDate?: string;
-  resetDate?: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    studentId?: string;
+    facultyId?: string;
+    phone?: string;
+  };
   reason: string;
-}
-
-interface UserForReset {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  department: string;
-  lastLogin: string;
-  status: 'active' | 'inactive' | 'locked';
-  passwordLastChanged: string;
+  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  requestedAt: string;
+  reviewedBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  reviewedAt?: string;
+  reviewNote?: string;
+  tempPassword?: string;
 }
 
 export default function ResetPasswordsPage() {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRole, setSelectedRole] = useState("all");
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [requests, setRequests] = useState<PasswordResetRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<PasswordResetRequest[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState<PasswordResetRequest | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | null>(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     const currentUser = getCurrentUser();
-    if (currentUser) {
+    if (currentUser && currentUser.role === 'admin') {
       setUser(currentUser);
+      loadPasswordResetRequests();
+      loadStats();
     } else {
-      router.push('/auth/login');
+      router.push('/login');
     }
     setIsLoading(false);
   }, [router]);
 
-  if (isLoading || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading...</div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    filterRequests();
+  }, [requests, selectedStatus, searchTerm]);
 
-  const resetRequests: PasswordResetRequest[] = [
-    {
-      id: "1",
-      userId: "u123",
-      userName: "Rahul Sharma",
-      userEmail: "rahul.sharma@yukti.edu.in",
-      userRole: "Student",
-      department: "Computer Science",
-      requestType: "self",
-      requestDate: "2024-10-01 14:30",
-      status: "pending",
-      reason: "Forgot password"
-    },
-    {
-      id: "2",
-      userId: "u124",
-      userName: "Dr. Priya Patel",
-      userEmail: "priya.patel@yukti.edu.in",
-      userRole: "Faculty",
-      department: "Electronics",
-      requestType: "admin",
-      requestDate: "2024-09-30 11:15",
-      status: "sent",
-      resetToken: "abc123xyz",
-      expiryDate: "2024-10-02 11:15",
-      reason: "Account locked - multiple failed attempts"
-    },
-    {
-      id: "3",
-      userId: "u125",
-      userName: "Amit Singh",
-      userEmail: "amit.singh@yukti.edu.in",
-      userRole: "Staff",
-      department: "Administration",
-      requestType: "bulk",
-      requestDate: "2024-09-28 09:00",
-      status: "completed",
-      resetDate: "2024-09-28 10:30",
-      reason: "Bulk password reset for security"
+  const loadPasswordResetRequests = async () => {
+    try {
+      setIsLoading(true);
+      // Mock API call - replace with actual API
+      const mockRequests: PasswordResetRequest[] = [
+        {
+          id: '1',
+          user: {
+            id: 'u1',
+            name: 'John Doe',
+            email: 'john.doe@student.edu',
+            role: 'student',
+            studentId: 'STU001',
+            phone: '9876543210'
+          },
+          reason: 'I forgot my password and cannot access my account. I need to reset it to access my course materials.',
+          status: 'pending',
+          requestedAt: '2024-10-15T10:30:00Z'
+        },
+        {
+          id: '2',
+          user: {
+            id: 'u2',
+            name: 'Dr. Sarah Smith',
+            email: 'sarah.smith@faculty.edu',
+            role: 'faculty',
+            facultyId: 'FAC001',
+            phone: '9876543211'
+          },
+          reason: 'My account was compromised and I need to reset my password immediately for security reasons.',
+          status: 'approved',
+          requestedAt: '2024-10-14T09:15:00Z',
+          reviewedBy: {
+            id: 'admin1',
+            name: 'Admin User',
+            email: 'admin@college.edu'
+          },
+          reviewedAt: '2024-10-14T10:00:00Z',
+          reviewNote: 'Security concern addressed. Password reset approved.',
+          tempPassword: 'TempPass123!'
+        },
+        {
+          id: '3',
+          user: {
+            id: 'u3',
+            name: 'Jane Wilson',
+            email: 'jane.wilson@student.edu',
+            role: 'student',
+            studentId: 'STU002'
+          },
+          reason: 'Need access for exam preparation.',
+          status: 'rejected',
+          requestedAt: '2024-10-13T16:45:00Z',
+          reviewedBy: {
+            id: 'admin1',
+            name: 'Admin User',
+            email: 'admin@college.edu'
+          },
+          reviewedAt: '2024-10-13T17:00:00Z',
+          reviewNote: 'Insufficient reason provided. Please try account recovery first.'
+        }
+      ];
+      setRequests(mockRequests);
+    } catch (err) {
+      setError('Failed to load password reset requests');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
-  const users: UserForReset[] = [
-    {
-      id: "u123",
-      name: "Rahul Sharma",
-      email: "rahul.sharma@yukti.edu.in",
-      phone: "+91 98765 43210",
-      role: "Student",
-      department: "Computer Science",
-      lastLogin: "2024-09-25 16:45",
-      status: "active",
-      passwordLastChanged: "2024-07-15 10:30"
-    },
-    {
-      id: "u124",
-      name: "Dr. Priya Patel",
-      email: "priya.patel@yukti.edu.in",
-      phone: "+91 98765 43211",
-      role: "Faculty",
-      department: "Electronics",
-      lastLogin: "2024-09-29 14:20",
-      status: "locked",
-      passwordLastChanged: "2024-06-10 09:15"
-    },
-    {
-      id: "u125",
-      name: "Amit Singh",
-      email: "amit.singh@yukti.edu.in",
-      phone: "+91 98765 43212",
-      role: "Staff",
-      department: "Administration",
-      lastLogin: "2024-10-01 08:30",
-      status: "active",
-      passwordLastChanged: "2024-09-28 10:30"
-    },
-    {
-      id: "u126",
-      name: "Sarah Johnson",
-      email: "sarah.johnson@yukti.edu.in",
-      phone: "+91 98765 43213",
-      role: "Faculty",
-      department: "Mechanical",
-      lastLogin: "2024-08-15 12:00",
-      status: "inactive",
-      passwordLastChanged: "2024-05-01 14:20"
+  const loadStats = async () => {
+    try {
+      // Mock API call - replace with actual API
+      const mockStats = {
+        byStatus: {
+          pending: 1,
+          approved: 1,
+          rejected: 1,
+          completed: 0
+        },
+        recentRequests: 3,
+        total: 3
+      };
+      setStats(mockStats);
+    } catch (err) {
+      console.error('Failed to load stats:', err);
     }
-  ];
+  };
 
-  const filteredUsers = users.filter(u => 
-    (selectedRole === "all" || u.role.toLowerCase() === selectedRole) &&
-    (u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     u.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filterRequests = () => {
+    let filtered = requests;
 
-  const getStatusColor = (status: string) => {
+    // Filter by status
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(req => req.status === selectedStatus);
+    }
+
+    // Filter by search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(req => 
+        req.user.name.toLowerCase().includes(term) ||
+        req.user.email.toLowerCase().includes(term) ||
+        req.reason.toLowerCase().includes(term) ||
+        req.user.role.toLowerCase().includes(term) ||
+        (req.user.studentId && req.user.studentId.toLowerCase().includes(term)) ||
+        (req.user.facultyId && req.user.facultyId.toLowerCase().includes(term))
+      );
+    }
+
+    setFilteredRequests(filtered);
+  };
+
+  const handleReviewRequest = async () => {
+    if (!selectedRequest || !reviewAction) return;
+
+    setIsSubmitting(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      // Mock API call - replace with actual API
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (reviewAction === 'approve') {
+        const tempPassword = 'TempPass' + Math.random().toString(36).substr(2, 8) + '!';
+        setSuccess(`Password reset approved. Temporary password: ${tempPassword}`);
+      } else {
+        setSuccess('Password reset request rejected successfully');
+      }
+      
+      setIsReviewModalOpen(false);
+      setSelectedRequest(null);
+      setReviewAction(null);
+      setReviewNote('');
+      loadPasswordResetRequests();
+      loadStats();
+    } catch (err) {
+      setError('Failed to review password reset request');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openReviewModal = (request: PasswordResetRequest, action: 'approve' | 'reject') => {
+    setSelectedRequest(request);
+    setReviewAction(action);
+    setReviewNote('');
+    setIsReviewModalOpen(true);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setSuccess('Copied to clipboard!');
+    setTimeout(() => setSuccess(''), 2000);
+  };
+
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'sent': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'expired': return 'bg-red-100 text-red-800';
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-gray-100 text-gray-800';
-      case 'locked': return 'bg-red-100 text-red-800';
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'completed': return 'bg-blue-100 text-blue-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending': return AlertCircle;
-      case 'sent': return Send;
+      case 'pending': return Clock;
+      case 'approved': return CheckCircle;
+      case 'rejected': return XCircle;
       case 'completed': return CheckCircle;
-      case 'expired': return XCircle;
-      case 'active': return CheckCircle;
-      case 'inactive': return XCircle;
-      case 'locked': return Lock;
       default: return AlertCircle;
     }
   };
 
-  const handleUserSelection = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
+  if (isLoading || !user) {
+    return (
+      <DashboardLayout title="Reset Passwords" userRole="admin">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </DashboardLayout>
     );
-  };
-
-  const isPasswordOld = (passwordDate: string) => {
-    const daysDiff = Math.floor((Date.now() - new Date(passwordDate).getTime()) / (1000 * 60 * 60 * 24));
-    return daysDiff > 90; // Consider password old if older than 90 days
-  };
+  }
 
   return (
     <DashboardLayout title="Reset Passwords" userRole="admin">
       <div className="space-y-6">
+        {/* Success/Error Messages */}
+        {success && (
+          <Alert>
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Password Reset Management</h2>
-            <p className="text-muted-foreground">Manage password reset requests and initiate bulk resets</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
-            </Button>
-            <Button>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Bulk Reset
-            </Button>
+            <p className="text-muted-foreground">Review and manage user password reset requests</p>
           </div>
         </div>
 
         {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Pending Requests</p>
-                  <p className="text-2xl font-bold">{resetRequests.filter(r => r.status === 'pending').length}</p>
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Pending Requests</p>
+                    <p className="text-2xl font-bold text-yellow-600">{stats.byStatus.pending}</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-yellow-600" />
                 </div>
-                <AlertCircle className="h-8 w-8 text-yellow-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Locked Accounts</p>
-                  <p className="text-2xl font-bold">{users.filter(u => u.status === 'locked').length}</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Approved</p>
+                    <p className="text-2xl font-bold text-green-600">{stats.byStatus.approved}</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
-                <Lock className="h-8 w-8 text-red-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Old Passwords</p>
-                  <p className="text-2xl font-bold">{users.filter(u => isPasswordOld(u.passwordLastChanged)).length}</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Rejected</p>
+                    <p className="text-2xl font-bold text-red-600">{stats.byStatus.rejected}</p>
+                  </div>
+                  <XCircle className="h-8 w-8 text-red-600" />
                 </div>
-                <Clock className="h-8 w-8 text-orange-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">This Month</p>
-                  <p className="text-2xl font-bold">{resetRequests.length}</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Requests</p>
+                    <p className="text-2xl font-bold text-blue-600">{stats.total}</p>
+                  </div>
+                  <Key className="h-8 w-8 text-blue-600" />
                 </div>
-                <RefreshCw className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Tabs defaultValue="requests" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="requests">Reset Requests</TabsTrigger>
-            <TabsTrigger value="users">User Accounts</TabsTrigger>
-            <TabsTrigger value="bulk">Bulk Operations</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="requests">Password Reset Requests</TabsTrigger>
+            <TabsTrigger value="approved">Approved Requests</TabsTrigger>
           </TabsList>
 
           <TabsContent value="requests" className="space-y-6">
+            {/* Search and Filter */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <RefreshCw className="h-5 w-5" />
-                  Password Reset Requests
-                </CardTitle>
-                <CardDescription>Manage pending and completed password reset requests</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {resetRequests.map((request) => {
-                    const StatusIcon = getStatusIcon(request.status);
-                    
-                    return (
-                      <Card key={request.id} className="border-l-4 border-l-blue-500">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                                <Users className="h-6 w-6 text-gray-400" />
-                              </div>
-                              <div>
-                                <h3 className="font-semibold">{request.userName}</h3>
-                                <p className="text-sm text-gray-600">{request.userEmail}</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge variant="outline">{request.userRole}</Badge>
-                                  <Badge variant="outline">{request.department}</Badge>
-                                </div>
-                              </div>
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Input
+                        placeholder="Search by name, email, ID, or reason..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={selectedStatus === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedStatus('all')}
+                    >
+                      All ({requests.length})
+                    </Button>
+                    <Button
+                      variant={selectedStatus === 'pending' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedStatus('pending')}
+                    >
+                      Pending ({stats?.byStatus.pending || 0})
+                    </Button>
+                    <Button
+                      variant={selectedStatus === 'approved' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedStatus('approved')}
+                    >
+                      Approved ({stats?.byStatus.approved || 0})
+                    </Button>
+                    <Button
+                      variant={selectedStatus === 'rejected' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedStatus('rejected')}
+                    >
+                      Rejected ({stats?.byStatus.rejected || 0})
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Requests List */}
+            <div className="space-y-4">
+              {filteredRequests.map((request) => {
+                const StatusIcon = getStatusIcon(request.status);
+                
+                return (
+                  <Card key={request.id} className="hover:shadow-lg transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-gray-500" />
+                              <h3 className="font-semibold">{request.user.name}</h3>
                             </div>
-                            <div className="text-right">
-                              <Badge className={getStatusColor(request.status)}>
-                                <StatusIcon className="h-3 w-3 mr-1" />
-                                {request.status}
-                              </Badge>
-                              <p className="text-sm text-gray-600 mt-1">{request.requestDate}</p>
-                            </div>
+                            <Badge className={getStatusBadgeVariant(request.status)}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {request.status}
+                            </Badge>
+                            <Badge variant="outline" className="capitalize">
+                              <Shield className="h-3 w-3 mr-1" />
+                              {request.user.role}
+                            </Badge>
                           </div>
 
-                          <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <span className="font-medium">Request Type: </span>
-                                <Badge variant="outline" className="capitalize">{request.requestType}</Badge>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm">{request.user.email}</span>
                               </div>
-                              <div>
-                                <span className="font-medium">Reason: </span>
-                                <span className="text-gray-600">{request.reason}</span>
+                              {request.user.phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="h-4 w-4 text-gray-500" />
+                                  <span className="text-sm">{request.user.phone}</span>
+                                </div>
+                              )}
+                              {(request.user.studentId || request.user.facultyId) && (
+                                <div className="flex items-center gap-2">
+                                  <Eye className="h-4 w-4 text-gray-500" />
+                                  <span className="text-sm">
+                                    ID: {request.user.studentId || request.user.facultyId}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-gray-500" />
+                                <span className="text-sm">
+                                  Requested: {new Date(request.requestedAt).toLocaleDateString()}
+                                </span>
                               </div>
-                              {request.expiryDate && (
-                                <div>
-                                  <span className="font-medium">Expires: </span>
-                                  <span className="text-gray-600">{request.expiryDate}</span>
+                              {request.reviewedAt && (
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-gray-500" />
+                                  <span className="text-sm">
+                                    Reviewed: {new Date(request.reviewedAt).toLocaleDateString()}
+                                  </span>
                                 </div>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex gap-2">
-                            {request.status === 'pending' && (
-                              <>
-                                <Button size="sm">
-                                  <Send className="h-4 w-4 mr-2" />
-                                  Send Reset Link
-                                </Button>
-                                <Button variant="outline" size="sm">
-                                  <Key className="h-4 w-4 mr-2" />
-                                  Generate Password
-                                </Button>
-                              </>
-                            )}
-                            {request.status === 'sent' && (
-                              <Button variant="outline" size="sm">
-                                <Mail className="h-4 w-4 mr-2" />
-                                Resend Link
-                              </Button>
-                            )}
-                            <Button variant="outline" size="sm">
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </Button>
+                          <div className="mb-4">
+                            <Label className="text-sm font-medium text-gray-700">Reason:</Label>
+                            <p className="text-sm text-gray-600 mt-1 p-3 bg-gray-50 rounded-lg">
+                              {request.reason}
+                            </p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="users" className="space-y-6">
-            {/* Search and Filter */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search users by name or email..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  <Select value={selectedRole} onValueChange={setSelectedRole}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Filter by role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Roles</SelectItem>
-                      <SelectItem value="student">Student</SelectItem>
-                      <SelectItem value="faculty">Faculty</SelectItem>
-                      <SelectItem value="staff">Staff</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline">
-                    <Filter className="h-4 w-4 mr-2" />
-                    More Filters
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Bulk Actions */}
-            {selectedUsers.length > 0 && (
-              <Card className="border-blue-200 bg-blue-50">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-blue-800">
-                      {selectedUsers.length} user(s) selected
-                    </p>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline">
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reset Selected
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        <Unlock className="h-4 w-4 mr-2" />
-                        Unlock Selected
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => setSelectedUsers([])}
-                      >
-                        Clear Selection
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Users List */}
-            <div className="space-y-4">
-              {filteredUsers.map((userAccount) => {
-                const StatusIcon = getStatusIcon(userAccount.status);
-                const passwordAge = Math.floor((Date.now() - new Date(userAccount.passwordLastChanged).getTime()) / (1000 * 60 * 60 * 24));
-                const isSelected = selectedUsers.includes(userAccount.id);
-                
-                return (
-                  <Card key={userAccount.id} className={`hover:shadow-lg transition-shadow ${isSelected ? 'border-blue-500 bg-blue-50' : ''}`}>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleUserSelection(userAccount.id)}
-                            className="rounded"
-                          />
-                          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                            <Users className="h-6 w-6 text-gray-400" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{userAccount.name}</h3>
-                            <p className="text-sm text-gray-600">{userAccount.email}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline">{userAccount.role}</Badge>
-                              <Badge variant="outline">{userAccount.department}</Badge>
-                              <Badge className={getStatusColor(userAccount.status)}>
-                                <StatusIcon className="h-3 w-3 mr-1" />
-                                {userAccount.status}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="grid grid-cols-2 gap-4 text-sm mb-2">
-                            <div>
-                              <p className="text-gray-600">Last Login</p>
-                              <p className="font-medium">{userAccount.lastLogin}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-600">Password Age</p>
-                              <p className={`font-medium ${passwordAge > 90 ? 'text-red-600' : passwordAge > 60 ? 'text-yellow-600' : 'text-green-600'}`}>
-                                {passwordAge} days
+                          {request.reviewNote && (
+                            <div className="mb-4">
+                              <Label className="text-sm font-medium text-gray-700">Admin Note:</Label>
+                              <p className="text-sm text-gray-600 mt-1 p-3 bg-blue-50 rounded-lg">
+                                {request.reviewNote}
                               </p>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Reset Password
-                            </Button>
-                            {userAccount.status === 'locked' ? (
-                              <Button variant="outline" size="sm">
-                                <Unlock className="h-4 w-4 mr-2" />
-                                Unlock
-                              </Button>
-                            ) : (
-                              <Button variant="outline" size="sm">
-                                <Lock className="h-4 w-4 mr-2" />
-                                Lock
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                          )}
 
-                      {passwordAge > 90 && (
-                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4 text-red-600" />
-                            <p className="text-sm text-red-800 font-medium">Password Expired</p>
-                          </div>
-                          <p className="text-sm text-red-700 mt-1">This user's password is older than 90 days and should be reset for security.</p>
+                          {request.tempPassword && (
+                            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                              <Label className="text-sm font-medium text-green-800">Temporary Password:</Label>
+                              <div className="flex items-center gap-2 mt-2">
+                                <code className="text-sm font-mono bg-white px-2 py-1 rounded border">
+                                  {request.tempPassword}
+                                </code>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => copyToClipboard(request.tempPassword!)}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                              <p className="text-xs text-green-700 mt-2">
+                                Share this password securely with the user
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      )}
+
+                        {request.status === 'pending' && (
+                          <div className="flex gap-2 ml-4">
+                            <Button 
+                              size="sm"
+                              onClick={() => openReviewModal(request, 'approve')}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Approve
+                            </Button>
+                            <Button 
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openReviewModal(request, 'reject')}
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
               })}
+
+              {filteredRequests.length === 0 && (
+                <Card>
+                  <CardContent className="p-12 text-center">
+                    <Key className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-600 mb-2">No requests found</h3>
+                    <p className="text-gray-500">
+                      {searchTerm || selectedStatus !== 'all' 
+                        ? 'Try adjusting your search or filter criteria'
+                        : 'No password reset requests have been submitted yet'
+                      }
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </TabsContent>
 
-          <TabsContent value="bulk" className="space-y-6">
+          <TabsContent value="approved">
             <Card>
               <CardHeader>
-                <CardTitle>Bulk Password Operations</CardTitle>
-                <CardDescription>Perform password operations on multiple users at once</CardDescription>
+                <CardTitle>Recently Approved Password Resets</CardTitle>
+                <CardDescription>Users who have received new temporary passwords</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card className="border-dashed">
-                    <CardContent className="p-6 text-center">
-                      <RefreshCw className="h-12 w-12 mx-auto text-blue-600 mb-4" />
-                      <h3 className="font-semibold mb-2">Bulk Password Reset</h3>
-                      <p className="text-sm text-gray-600 mb-4">Reset passwords for multiple users and send new credentials</p>
-                      <Button className="w-full">
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Start Bulk Reset
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-dashed">
-                    <CardContent className="p-6 text-center">
-                      <Upload className="h-12 w-12 mx-auto text-green-600 mb-4" />
-                      <h3 className="font-semibold mb-2">Import Reset List</h3>
-                      <p className="text-sm text-gray-600 mb-4">Upload CSV file with users who need password reset</p>
-                      <Button variant="outline" className="w-full">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload CSV
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-dashed">
-                    <CardContent className="p-6 text-center">
-                      <Calendar className="h-12 w-12 mx-auto text-purple-600 mb-4" />
-                      <h3 className="font-semibold mb-2">Scheduled Reset</h3>
-                      <p className="text-sm text-gray-600 mb-4">Schedule password expiry and automatic reset reminders</p>
-                      <Button variant="outline" className="w-full">
-                        <Calendar className="h-4 w-4 mr-2" />
-                        Schedule Reset
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-dashed">
-                    <CardContent className="p-6 text-center">
-                      <Shield className="h-12 w-12 mx-auto text-orange-600 mb-4" />
-                      <h3 className="font-semibold mb-2">Security Policy</h3>
-                      <p className="text-sm text-gray-600 mb-4">Configure password policies and expiry rules</p>
-                      <Button variant="outline" className="w-full">
-                        <Shield className="h-4 w-4 mr-2" />
-                        Manage Policies
-                      </Button>
-                    </CardContent>
-                  </Card>
+              <CardContent>
+                <div className="space-y-4">
+                  {requests.filter(req => req.status === 'approved').map((request) => (
+                    <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg bg-green-50">
+                      <div>
+                        <h4 className="font-medium">{request.user.name}</h4>
+                        <p className="text-sm text-gray-600">{request.user.email}</p>
+                        <p className="text-xs text-gray-500">
+                          Approved on {new Date(request.reviewedAt!).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {request.tempPassword && (
+                        <div className="flex items-center gap-2">
+                          <code className="text-sm font-mono bg-white px-2 py-1 rounded border">
+                            {request.tempPassword}
+                          </code>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => copyToClipboard(request.tempPassword!)}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Password Policy Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label>Password Expiry (Days)</Label>
-                        <Input type="number" defaultValue="90" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Minimum Password Length</Label>
-                        <Input type="number" defaultValue="8" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Failed Attempts Before Lock</Label>
-                        <Input type="number" defaultValue="5" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Account Lock Duration (Hours)</Label>
-                        <Input type="number" defaultValue="24" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h4 className="font-semibold">Password Requirements</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="flex items-center space-x-2">
-                          <input type="checkbox" defaultChecked className="rounded" />
-                          <label className="text-sm">Uppercase letters</label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input type="checkbox" defaultChecked className="rounded" />
-                          <label className="text-sm">Lowercase letters</label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input type="checkbox" defaultChecked className="rounded" />
-                          <label className="text-sm">Numbers</label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <input type="checkbox" defaultChecked className="rounded" />
-                          <label className="text-sm">Special characters</label>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button>
-                      <Shield className="h-4 w-4 mr-2" />
-                      Update Policy
-                    </Button>
-                  </CardContent>
-                </Card>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Review Modal */}
+        <Dialog open={isReviewModalOpen} onOpenChange={setIsReviewModalOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                {reviewAction === 'approve' ? 'Approve' : 'Reject'} Password Reset Request
+              </DialogTitle>
+              <DialogDescription>
+                {selectedRequest && (
+                  <>Review the password reset request from {selectedRequest.user.name}</>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {selectedRequest && (
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium">User Information</Label>
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                    <p><strong>Name:</strong> {selectedRequest.user.name}</p>
+                    <p><strong>Email:</strong> {selectedRequest.user.email}</p>
+                    <p><strong>Role:</strong> {selectedRequest.user.role}</p>
+                    {(selectedRequest.user.studentId || selectedRequest.user.facultyId) && (
+                      <p><strong>ID:</strong> {selectedRequest.user.studentId || selectedRequest.user.facultyId}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Request Reason</Label>
+                  <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm">{selectedRequest.reason}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="reviewNote" className="text-sm font-medium">
+                    Admin Note {reviewAction === 'reject' ? '(Required)' : '(Optional)'}
+                  </Label>
+                  <Textarea
+                    id="reviewNote"
+                    value={reviewNote}
+                    onChange={(e) => setReviewNote(e.target.value)}
+                    placeholder={
+                      reviewAction === 'approve' 
+                        ? 'Add any notes about this approval...'
+                        : 'Please provide a reason for rejection...'
+                    }
+                    rows={3}
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsReviewModalOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleReviewRequest}
+                disabled={isSubmitting || (reviewAction === 'reject' && !reviewNote.trim())}
+                className={reviewAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {reviewAction === 'approve' ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Approve & Reset Password
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Reject Request
+                      </>
+                    )}
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

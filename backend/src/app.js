@@ -69,6 +69,7 @@ app.use('/api/classrooms', require('./academic/routes/classroomRoutes'));
 app.use('/api/timetable', require('./academic/routes/timetableRoutes'));
 app.use('/api/faculty', require('./faculty/routes/facultyRoutes'));
 app.use('/api/assignments', require('./faculty/routes/assignmentRoutes'));
+app.use('/api/faculty/attendance', require('./faculty/routes/attendanceRoutes'));
 app.use('/api/attendance', require('./students/routes/attendanceRoutes'));
 app.use('/api/exams', require('./examinations/routes/examRoutes'));
 app.use('/api/library', require('./library/routes/libraryRoutes'));

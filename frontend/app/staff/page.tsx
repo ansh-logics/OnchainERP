@@ -13,11 +13,29 @@ export default function StaffPage() {
       router.push('/login');
       return;
     }
-    if (currentUser.role !== 'staff') {
-      router.push(`/${currentUser.role}/dashboard`);
+    if (currentUser.role !== 'staff' && currentUser.role !== 'faculty') {
+      // Redirect to correct dashboard based on role
+      let redirectPath = '/dashboard';
+      
+      switch (currentUser.role) {
+        case 'admin':
+        case 'super_admin':
+          redirectPath = '/admin/dashboard';
+          break;
+        case 'student':
+          redirectPath = '/student/dashboard';
+          break;
+        case 'cashier':
+          redirectPath = '/cashier/dashboard';
+          break;
+        default:
+          redirectPath = '/dashboard';
+      }
+      
+      router.push(redirectPath);
       return;
     }
-    // Redirect to staff dashboard
+    // Redirect to staff dashboard (for both staff and faculty roles)
     router.push('/staff/dashboard');
   }, [router]);
 

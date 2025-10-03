@@ -10,8 +10,12 @@ const {
   createSections,
   getDepartmentStats,
   assignRollNumbersToStudents,
-  resetRollNumbers
+  resetRollNumbers,
+  bulkImportDepartments
 } = require('../controllers/departmentController');
+
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 const { protect, authorize } = require('../../shared/middleware/auth');
 
@@ -54,5 +58,9 @@ router
 router
   .route('/:id/reset-roll-numbers')
   .post(authorize('admin', 'super_admin'), resetRollNumbers);
+
+router
+  .route('/bulk-import')
+  .post(authorize('admin', 'super_admin'), upload.single('file'), bulkImportDepartments);
 
 module.exports = router;

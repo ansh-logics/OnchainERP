@@ -187,7 +187,8 @@ exports.login = async (req, res, next) => {
       where: { email },
       include: [
         { association: 'studentProfile' },
-        { association: 'facultyProfile' }
+        { association: 'facultyProfile' },
+        { association: 'college', attributes: ['id', 'name', 'shortName'] }
       ]
     });
 
@@ -283,8 +284,19 @@ exports.getMe = async (req, res, next) => {
     const user = await User.findByPk(req.user.id, {
       attributes: { exclude: ['password'] },
       include: [
-        { association: 'studentProfile' },
-        { association: 'facultyProfile' }
+        { 
+          association: 'studentProfile',
+          include: [
+            { association: 'section' },
+            { association: 'department' }
+          ]
+        },
+        { 
+          association: 'facultyProfile',
+          include: [
+            { association: 'department' }
+          ]
+        }
       ]
     });
 

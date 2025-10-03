@@ -3,230 +3,121 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from "@/lib/auth";
+import { getExams, type ExamData } from "@/lib/api";
 import { 
   Search,
-  FileText, 
-  Calendar, 
-  CheckCircle, 
-  AlertTriangle, 
-  Eye,
+  Calendar,
+  Clock,
+  FileText,
+  Plus,
   Filter,
   Download,
-  Plus,
-  Edit,
-  Users,
-  Award,
-  BookOpen
+  AlertCircle,
+  RefreshCcw,
+  BookOpen,
+  Users
 } from "lucide-react";
 
 export default function StaffExamsPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
+  const [exams, setExams] = useState<ExamData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTab, setSelectedTab] = useState("schedule");
+  const [selectedTab, setSelectedTab] = useState("scheduled");
   const router = useRouter();
 
   useEffect(() => {
     const currentUser = getCurrentUser();
-    if (!currentUser || currentUser.role !== 'staff') {
+    if (!currentUser || (currentUser.role !== 'staff' && currentUser.role !== 'faculty')) {
       router.push('/login');
       return;
     }
     setUser(currentUser);
+    loadExams();
   }, [router]);
 
+  const loadExams = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await getExams({ limit: 100 });
+      
+      if (response.success && response.data) {
+        setExams(response.data.data || []);
+      } else {
+        setError(response.message || 'Failed to load exams');
+      }
+    } catch (err) {
+      console.error('Error loading exams:', err);
+      setError('An error occurred while loading exams');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!user) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Mock exam data
-  const examSchedule = [
-    {
-      id: '1',
-      subject: 'Data Structures',
-      course: 'B.Tech Computer Science',
-      semester: '4th Semester',
-      examType: 'Mid-term',
-      date: '2024-04-15',
-      time: '10:00 AM - 01:00 PM',
-      duration: '3 hours',
-      room: 'Room 201, Block A',
-      supervisor: 'Dr. Rajesh Kumar',
-      totalStudents: 45,
-      status: 'scheduled'
-    },
-    {
-      id: '2',
-      subject: 'Database Management Systems',
-      course: 'B.Tech Computer Science',
-      semester: '5th Semester',
-      examType: 'Final',
-      date: '2024-04-18',
-      time: '02:00 PM - 05:00 PM',
-      duration: '3 hours',
-      room: 'Room 105, Block B',
-      supervisor: 'Prof. Priya Sharma',
-      totalStudents: 38,
-      status: 'scheduled'
-    },
-    {
-      id: '3',
-      subject: 'Digital Electronics',
-      course: 'B.Tech Electronics',
-      semester: '3rd Semester',
-      examType: 'Mid-term',
-      date: '2024-04-12',
-      time: '10:00 AM - 01:00 PM',
-      duration: '3 hours',
-      room: 'Room 301, Block C',
-      supervisor: 'Dr. Amit Patel',
-      totalStudents: 42,
-      status: 'completed'
-    }
-  ];
+  const filteredExams = exams.filter(exam => {
+    const matchesSearch = exam.course?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         exam.course?.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         exam.examType?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (selectedTab === 'all') return matchesSearch;
+    return matchesSearch && exam.status === selectedTab;
+  });
 
-  // Mock student results
-  const examResults = [
-    {
-      id: '1',
-      examId: '3',
-      studentName: 'Priya Sharma',
-      rollNumber: 'CS21B001',
-      subject: 'Digital Electronics',
-      maxMarks: 100,
-      obtainedMarks: 85,
-      grade: 'A',
-      status: 'graded',
-      remarks: 'Excellent performance'
-    },
-    {
-      id: '2',
-      examId: '3',
-      studentName: 'Rahul Kumar',
-      rollNumber: 'ME21B045',
-      subject: 'Digital Electronics',
-      maxMarks: 100,
-      obtainedMarks: 72,
-      grade: 'B+',
-      status: 'graded',
-      remarks: 'Good understanding'
-    },
-    {
-      id: '3',
-      examId: '3',
-      studentName: 'Sneha Reddy',
-      rollNumber: 'EC21B023',
-      subject: 'Digital Electronics',
-      maxMarks: 100,
-      obtainedMarks: 0,
-      grade: 'F',
-      status: 'absent',
-      remarks: 'Medical leave'
-    }
-  ];
-
-  // Mock exam halls
-  const examHalls = [
-    {
-      id: '1',
-      name: 'Room 201, Block A',
-      capacity: 50,
-      facilities: ['Air Conditioned', 'CCTV', 'Individual Desks'],
-      status: 'available'
-    },
-    {
-      id: '2',
-      name: 'Room 105, Block B',
-      capacity: 40,
-      facilities: ['Air Conditioned', 'CCTV', 'Projector'],
-      status: 'occupied'
-    },
-    {
-      id: '3',
-      name: 'Auditorium',
-      capacity: 200,
-      facilities: ['Air Conditioned', 'CCTV', 'Audio System', 'Stage'],
-      status: 'available'
-    }
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      case 'graded': return 'bg-green-100 text-green-800';
-      case 'absent': return 'bg-gray-100 text-gray-800';
-      case 'available': return 'bg-green-100 text-green-800';
-      case 'occupied': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const stats = {
+    total: exams.length,
+    scheduled: exams.filter(e => e.status === 'scheduled').length,
+    completed: exams.filter(e => e.status === 'completed').length,
+    inProgress: exams.filter(e => e.status === 'in_progress').length,
+    cancelled: exams.filter(e => e.status === 'cancelled').length,
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'scheduled': return <Calendar className="h-4 w-4" />;
-      case 'completed': return <CheckCircle className="h-4 w-4" />;
-      case 'cancelled': return <AlertTriangle className="h-4 w-4" />;
-      case 'graded': return <Award className="h-4 w-4" />;
-      case 'absent': return <Users className="h-4 w-4" />;
-      default: return <FileText className="h-4 w-4" />;
-    }
+  const formatDate = (date: Date | undefined) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
-  const getGradeColor = (grade: string) => {
-    switch (grade) {
-      case 'A':
-      case 'A+': return 'text-green-600';
-      case 'B':
-      case 'B+': return 'text-blue-600';
-      case 'C':
-      case 'C+': return 'text-yellow-600';
-      case 'D': return 'text-orange-600';
-      case 'F': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  const filteredExams = examSchedule.filter(exam => 
-    exam.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    exam.course.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    exam.supervisor.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredResults = examResults.filter(result => 
-    result.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    result.subject.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const examStats = {
-    totalExams: examSchedule.length,
-    scheduled: examSchedule.filter(exam => exam.status === 'scheduled').length,
-    completed: examSchedule.filter(exam => exam.status === 'completed').length,
-    totalStudents: examSchedule.reduce((sum, exam) => sum + exam.totalStudents, 0),
-    avgAttendance: 92,
-    passRate: 85
+  const formatTime = (time: string) => {
+    if (!time) return 'N/A';
+    return time;
   };
 
   return (
-    <DashboardLayout title="Exam Management" userRole="staff">
+    <DashboardLayout title="Exam Management" userRole={(user.role === 'faculty' ? 'faculty' : 'staff') as 'faculty'}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Exam Management</h2>
-            <p className="text-gray-600">Manage exam schedules, conduct exams, and maintain results</p>
+            <p className="text-gray-600">Schedule and manage examinations</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Export Report
+            <Button variant="outline" onClick={loadExams}>
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Refresh
             </Button>
             <Button>
               <Plus className="h-4 w-4 mr-2" />
@@ -235,280 +126,194 @@ export default function StaffExamsPage() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-blue-600" />
-                <div>
-                  <div className="text-xl font-bold">{examStats.scheduled}</div>
-                  <p className="text-sm text-gray-600">Scheduled Exams</p>
-                </div>
+        {/* Error Message */}
+        {error && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-red-800">
+                <AlertCircle className="h-5 w-5" />
+                <p>{error}</p>
               </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={loadExams}
+                className="mt-4"
+              >
+                Retry
+              </Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <div>
-                  <div className="text-xl font-bold">{examStats.completed}</div>
-                  <p className="text-sm text-gray-600">Completed Exams</p>
-                </div>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-gray-600">Total Exams</CardTitle>
+                <FileText className="h-4 w-4 text-gray-600" />
               </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total}</div>
             </CardContent>
           </Card>
+
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-purple-600" />
-                <div>
-                  <div className="text-xl font-bold">{examStats.totalStudents}</div>
-                  <p className="text-sm text-gray-600">Total Students</p>
-                </div>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-blue-600">Scheduled</CardTitle>
+                <Calendar className="h-4 w-4 text-blue-600" />
               </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">{stats.scheduled}</div>
             </CardContent>
           </Card>
+
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Award className="h-5 w-5 text-yellow-600" />
-                <div>
-                  <div className="text-xl font-bold text-green-600">{examStats.passRate}%</div>
-                  <p className="text-sm text-gray-600">Pass Rate</p>
-                </div>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-orange-600">In Progress</CardTitle>
+                <Clock className="h-4 w-4 text-orange-600" />
               </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">{stats.inProgress}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-green-600">Completed</CardTitle>
+                <FileText className="h-4 w-4 text-green-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-red-600">Cancelled</CardTitle>
+                <AlertCircle className="h-4 w-4 text-red-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">{stats.cancelled}</div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="pt-6">
             <div className="flex gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search exams, subjects, or students..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by course name, code, or exam type..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
               </div>
               <Button variant="outline">
                 <Filter className="h-4 w-4 mr-2" />
                 Filters
               </Button>
+              <Button variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Main Content */}
-        <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-          <TabsList>
-            <TabsTrigger value="schedule">Exam Schedule</TabsTrigger>
-            <TabsTrigger value="results">Results Management</TabsTrigger>
-            <TabsTrigger value="halls">Exam Halls</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="schedule" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upcoming Exams</CardTitle>
-                <CardDescription>View and manage exam schedules</CardDescription>
-              </CardHeader>
-              <CardContent>
+        {/* Exams Table */}
+        <Card>
+          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+            <CardHeader>
+              <TabsList>
+                <TabsTrigger value="scheduled">Scheduled ({stats.scheduled})</TabsTrigger>
+                <TabsTrigger value="in_progress">In Progress ({stats.inProgress})</TabsTrigger>
+                <TabsTrigger value="completed">Completed ({stats.completed})</TabsTrigger>
+                <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
+              </TabsList>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="py-12 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading exams...</p>
+                </div>
+              ) : filteredExams.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No exams found</p>
+                  {searchTerm && (
+                    <Button 
+                      variant="link" 
+                      onClick={() => setSearchTerm('')}
+                      className="mt-2"
+                    >
+                      Clear search
+                    </Button>
+                  )}
+                </div>
+              ) : (
                 <div className="space-y-4">
                   {filteredExams.map((exam) => (
-                    <div key={exam.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            {getStatusIcon(exam.status)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{exam.subject}</h3>
-                            <p className="text-sm text-gray-600">{exam.course} • {exam.semester}</p>
-                          </div>
-                        </div>
-                        <Badge className={getStatusColor(exam.status)}>
-                          {exam.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                        <div className="p-3 bg-blue-50 rounded">
-                          <p className="font-medium text-blue-900">Date & Time</p>
-                          <p className="text-blue-700">{new Date(exam.date).toLocaleDateString()}</p>
-                          <p className="text-blue-600">{exam.time}</p>
-                        </div>
-                        <div className="p-3 bg-purple-50 rounded">
-                          <p className="font-medium text-purple-900">Duration</p>
-                          <p className="text-purple-700">{exam.duration}</p>
-                          <p className="text-purple-600">{exam.examType}</p>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded">
-                          <p className="font-medium text-green-900">Venue</p>
-                          <p className="text-green-700">{exam.room}</p>
-                        </div>
-                        <div className="p-3 bg-orange-50 rounded">
-                          <p className="font-medium text-orange-900">Students</p>
-                          <p className="text-orange-700">{exam.totalStudents} enrolled</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-medium">Supervisor:</span> {exam.supervisor}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View Details
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
-                          {exam.status === 'scheduled' && (
-                            <Button size="sm">
-                              <FileText className="h-4 w-4 mr-1" />
-                              Start Exam
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="results" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Exam Results</CardTitle>
-                <CardDescription>Manage student exam results and grades</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {filteredResults.map((result) => (
-                    <div key={result.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            {getStatusIcon(result.status)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{result.studentName}</h3>
-                            <p className="text-sm text-gray-600">{result.rollNumber} • {result.subject}</p>
-                          </div>
-                        </div>
-                        <Badge className={getStatusColor(result.status)}>
-                          {result.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                        <div className="p-3 bg-blue-50 rounded">
-                          <p className="font-medium text-blue-900">Obtained Marks</p>
-                          <p className="text-xl font-bold text-blue-700">{result.obtainedMarks}</p>
-                        </div>
-                        <div className="p-3 bg-gray-50 rounded">
-                          <p className="font-medium text-gray-900">Maximum Marks</p>
-                          <p className="text-xl font-bold text-gray-700">{result.maxMarks}</p>
-                        </div>
-                        <div className="p-3 bg-yellow-50 rounded">
-                          <p className="font-medium text-yellow-900">Percentage</p>
-                          <p className="text-xl font-bold text-yellow-700">{((result.obtainedMarks / result.maxMarks) * 100).toFixed(1)}%</p>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded">
-                          <p className="font-medium text-green-900">Grade</p>
-                          <p className={`text-xl font-bold ${getGradeColor(result.grade)}`}>{result.grade}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm">
-                        <div>
-                          <span className="font-medium">Remarks:</span> {result.remarks}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <Eye className="h-4 w-4 mr-1" />
-                            View Answer Sheet
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit Marks
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="halls" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Exam Halls</CardTitle>
-                <CardDescription>Manage exam venues and their availability</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {examHalls.map((hall) => (
-                    <div key={hall.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                      <div className="flex items-center justify-between mb-4">
+                    <div key={exam.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                      <div className="flex-1">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white">
                             <BookOpen className="h-5 w-5" />
                           </div>
                           <div>
-                            <h3 className="font-semibold">{hall.name}</h3>
-                            <p className="text-sm text-gray-600">Capacity: {hall.capacity} students</p>
+                            <h3 className="font-semibold">{exam.course?.name || 'Unknown Course'}</h3>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span>{exam.course?.code}</span>
+                              <span>•</span>
+                              <span>{exam.examType}</span>
+                              <span>•</span>
+                              <span>{formatDate(exam.examDate)}</span>
+                              <span>•</span>
+                              <span>{formatTime(exam.startTime)} - {formatTime(exam.endTime)}</span>
+                            </div>
                           </div>
                         </div>
-                        <Badge className={getStatusColor(hall.status)}>
-                          {hall.status.toUpperCase()}
-                        </Badge>
                       </div>
-                      
-                      <div className="mb-4">
-                        <p className="font-medium text-sm mb-2">Facilities:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {hall.facilities.map((facility, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {facility}
-                            </Badge>
-                          ))}
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-sm font-medium">Marks: {exam.totalMarks}</div>
+                          <div className="text-xs text-gray-600">Pass: {exam.passingMarks}</div>
+                          {exam.examHall && (
+                            <div className="text-xs text-gray-600">{exam.examHall.hallName}</div>
+                          )}
                         </div>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="flex-1">
-                          <Eye className="h-4 w-4 mr-1" />
-                          View Schedule
+                        <Badge variant={
+                          exam.status === 'completed' ? 'default' :
+                          exam.status === 'scheduled' ? 'secondary' :
+                          exam.status === 'in_progress' ? 'outline' : 'destructive'
+                        }>
+                          {exam.status}
+                        </Badge>
+                        <Button variant="ghost" size="sm">
+                          View
                         </Button>
-                        {hall.status === 'available' && (
-                          <Button size="sm" className="flex-1">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            Book Hall
-                          </Button>
-                        )}
                       </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              )}
+            </CardContent>
+          </Tabs>
+        </Card>
       </div>
     </DashboardLayout>
   );

@@ -1,0 +1,18 @@
+name,email,role,phone,studentId,facultyId,password
+Dr. Rajesh Kumar,rajesh.kumar@college.edu,faculty,9876543210,,FAC001,TempPass123!
+Dr. Priya Sharma,priya.sharma@college.edu,faculty,9876543211,,FAC002,TempPass123!
+Prof. Amit Singh,amit.singh@college.edu,faculty,9876543212,,FAC003,TempPass123!
+Dr. Sunita Patel,sunita.patel@college.edu,faculty,9876543213,,FAC004,TempPass123!
+Prof. Vikram Gupta,vikram.gupta@college.edu,faculty,9876543214,,FAC005,TempPass123!
+Arjun Malhotra,arjun.malhotra@student.edu,student,9876543215,STU001,,TempPass123!
+Kavya Reddy,kavya.reddy@student.edu,student,9876543216,STU002,,TempPass123!
+Rohit Sharma,rohit.sharma@student.edu,student,9876543217,STU003,,TempPass123!
+Ananya Iyer,ananya.iyer@student.edu,student,9876543218,STU004,,TempPass123!
+Siddharth Jain,siddharth.jain@student.edu,student,9876543219,STU005,,TempPass123!
+Meera Krishnan,meera.krishnan@student.edu,student,9876543220,STU006,,TempPass123!
+Aarav Agarwal,aarav.agarwal@student.edu,student,9876543221,STU007,,TempPass123!
+Ishita Bansal,ishita.bansal@student.edu,student,9876543222,STU008,,TempPass123!
+Karan Mehta,karan.mehta@student.edu,student,9876543223,STU009,,TempPass123!
+Riya Kapoor,riya.kapoor@student.edu,student,9876543224,STU010,,TempPass123!
+Aditi Verma,aditi.verma@staff.edu,admin,9876543225,,,TempPass123!
+Rajesh Cashier,rajesh.cashier@staff.edu,cashier,9876543226,,,TempPass123!

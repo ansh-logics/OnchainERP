@@ -17,7 +17,25 @@ export default function StudentPage() {
     if (currentUser.role === 'student') {
       router.push('/student/dashboard');
     } else {
-      router.push(`/${currentUser.role}/dashboard`);
+      // Redirect to correct dashboard based on role
+      let redirectPath = '/dashboard';
+      
+      switch (currentUser.role) {
+        case 'admin':
+        case 'super_admin':
+          redirectPath = '/admin/dashboard';
+          break;
+        case 'faculty':
+          redirectPath = '/staff/dashboard';
+          break;
+        case 'cashier':
+          redirectPath = '/cashier/dashboard';
+          break;
+        default:
+          redirectPath = '/dashboard';
+      }
+      
+      router.push(redirectPath);
     }
   }, [router]);
 

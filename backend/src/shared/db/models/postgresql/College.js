@@ -104,6 +104,10 @@ const College = sequelize.define('College', {
     type: DataTypes.STRING,  // URL or file path
     allowNull: true
   },
+  letterhead: {
+    type: DataTypes.STRING,  // URL or file path
+    allowNull: true
+  },
   primaryColor: {
     type: DataTypes.STRING(7),  // Hex color code
     defaultValue: '#2563eb',

@@ -5,6 +5,166 @@ const ErrorResponse = require('../../shared/utils/errorResponse');
 const LoggingService = require('../../shared/services/LoggingService');
 const rollNumberGenerator = require('../../shared/utils/rollNumberGenerator');
 
+// @desc    Bulk import departments from CSV file
+// @route   POST /api/departments/bulk-import
+// @access  Private (Admin, Super Admin)
+const bulkImportDepartments = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return next(new ErrorResponse('Please upload a CSV file', 400));
+    }
+    
+    // Check if user has permission to bulk import departments
+    const userCollegeId = req.user.college?.id || req.user.collegeId;
+    
+    if (req.user.role !== 'super_admin' && !userCollegeId) {
+      return next(new ErrorResponse('Not authorized to bulk import departments', 403));
+    }
+    
+    const csv = req.file.buffer.toString('utf8');
+    const rows = csv.split('\n').filter(row => row.trim());
+    
+    if (rows.length < 2) {
+      return next(new ErrorResponse('CSV file must contain at least a header row and one data row', 400));
+    }
+    
+    // Parse headers and validate format
+    const headers = rows[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, ''));
+    const requiredHeaders = ['name', 'shortname', 'code', 'description', 'studentspersection', 'totalsections', 'totalintake'];
+    const optionalHeaders = ['currentstrength', 'hodid', 'programs'];
+    
+    const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+    if (missingHeaders.length > 0) {
+      return next(new ErrorResponse(`Missing required headers: ${missingHeaders.join(', ')}`, 400));
+    }
+    
+    const departmentsData = [];
+    const validationErrors = [];
+    
+    // Process each row
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i].split(',').map(cell => cell.trim());
+      
+      if (row.length !== headers.length) {
+        validationErrors.push(`Row ${i + 1}: Column count mismatch`);
+        continue;
+      }
+      
+      const department = {};
+      
+      // Map CSV columns to department properties
+      headers.forEach((header, index) => {
+        department[header] = row[index];
+      });
+      
+      // Validate required fields
+      if (!department.name || !department.shortname || !department.code || !department.description) {
+        validationErrors.push(`Row ${i + 1}: Missing required fields (name, shortname, code, or description)`);
+        continue;
+      }
+      
+      // Convert numeric fields
+      try {
+        department.studentspersection = parseInt(department.studentspersection) || 60;
+        department.totalsections = parseInt(department.totalsections) || 1;
+        department.totalintake = parseInt(department.totalintake) || 60;
+        department.currentstrength = department.currentstrength ? parseInt(department.currentstrength) : 0;
+      } catch (error) {
+        validationErrors.push(`Row ${i + 1}: Invalid numeric values`);
+        continue;
+      }
+      
+      // Add college ID
+      department.college = userCollegeId;
+      
+      departmentsData.push(department);
+    }
+    
+    if (validationErrors.length > 0) {
+      return next(new ErrorResponse(`Validation errors: ${validationErrors.join('; ')}`, 400));
+    }
+    
+    if (departmentsData.length === 0) {
+      return next(new ErrorResponse('No valid department data found in CSV', 400));
+    }
+    
+    const results = {
+      created: 0,
+      updated: 0,
+      errors: []
+    };
+    
+    // Use transaction for atomic operations
+    const transaction = await Department.sequelize.transaction();
+    
+    try {
+      for (const deptData of departmentsData) {
+        try {
+          // Check if department already exists by code
+          const existingDepartment = await Department.findOne({
+            where: {
+              code: deptData.code.toUpperCase(),
+              collegeId: userCollegeId
+            },
+            transaction
+          });
+          
+           if (existingDepartment) {
+             // Update existing department
+             await existingDepartment.update({
+               name: deptData.name,
+               shortName: deptData.shortname.toUpperCase(),
+               description: deptData.description,
+               hodId: deptData.hodid || null,
+               studentsPerSection: deptData.studentspersection,
+               totalSections: deptData.totalsections,
+               totalIntake: deptData.totalintake,
+               currentStrength: deptData.currentstrength
+             }, { transaction });
+             results.updated++;
+           } else {
+             // Create new department
+             await Department.create({
+               name: deptData.name,
+               shortName: deptData.shortname.toUpperCase(),
+               code: deptData.code.toUpperCase(),
+               description: deptData.description,
+               collegeId: userCollegeId,
+               hodId: deptData.hodid || null,
+               studentsPerSection: deptData.studentspersection,
+               totalSections: deptData.totalsections,
+               totalIntake: deptData.totalintake,
+               currentStrength: deptData.currentstrength
+             }, { transaction });
+             results.created++;
+           }
+        } catch (error) {
+          results.errors.push({
+            department: deptData.name || deptData.code,
+            error: error.message
+          });
+        }
+      }
+      
+      await transaction.commit();
+      
+      res.status(200).json({
+        success: true,
+        message: `Bulk import completed: ${results.created} created, ${results.updated} updated`,
+        data: results
+      });
+      
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+    
+  } catch (error) {
+    console.error('Bulk import departments error:', error);
+    next(error);
+  }
+};
+
 // @desc    Create a new department
 // @route   POST /api/departments
 // @access  Private (Admin, Super Admin)
@@ -632,5 +792,6 @@ module.exports = {
   createSections,
   getDepartmentStats,
   assignRollNumbersToStudents,
-  resetRollNumbers
+  resetRollNumbers,
+  bulkImportDepartments
 };
