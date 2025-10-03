@@ -45,6 +45,8 @@ exports.getSectionStudents = async (req, res, next) => {
     const { date } = req.query;
     const selectedDate = date || new Date().toISOString().split('T')[0];
     
+    console.log(`📚 Fetching students for section ${sectionId} on date ${selectedDate}`);
+    
     const students = await Student.findAll({
       where: {
         sectionId: sectionId,
@@ -62,13 +64,15 @@ exports.getSectionStudents = async (req, res, next) => {
       order: [['rollNumber', 'ASC']]
     });
 
-    // Check if attendance already marked for today
+    // Check if attendance already marked for this date
     const attendanceRecords = await Attendance.findAll({
       where: {
         studentId: students.map(s => s.id),
         attendanceDate: selectedDate
       }
     });
+
+    console.log(`✅ Found ${students.length} students, ${attendanceRecords.length} attendance records`);
 
     const attendanceMap = {};
     attendanceRecords.forEach(record => {
@@ -92,7 +96,7 @@ exports.getSectionStudents = async (req, res, next) => {
       data: studentsWithAttendance
     });
   } catch (error) {
-    console.error('Error fetching section students:', error);
+    console.error('❌ Error fetching section students:', error);
     next(error);
   }
 };
@@ -105,20 +109,30 @@ exports.markSimpleAttendance = async (req, res, next) => {
     const { sectionId, date, attendanceRecords } = req.body;
     const facultyUserId = req.user.id;
 
+    console.log(`📝 Marking attendance for section ${sectionId} on ${date}`);
+    console.log(`📋 Faculty user ID: ${facultyUserId}`);
+    console.log(`👥 Records count: ${attendanceRecords?.length || 0}`);
+
     // Get faculty record
     const faculty = await Faculty.findOne({
       where: { userId: facultyUserId }
     });
 
     if (!faculty) {
+      console.error('❌ Faculty profile not found for user:', facultyUserId);
       return next(new ErrorResponse('Faculty profile not found', 404));
     }
+
+    console.log(`✅ Faculty found: ${faculty.id}`);
 
     // Get a default course for this section (just pick first one)
     const section = await Section.findByPk(sectionId);
     if (!section) {
+      console.error('❌ Section not found:', sectionId);
       return next(new ErrorResponse('Section not found', 404));
     }
+
+    console.log(`✅ Section found: ${section.name} (Dept: ${section.departmentId})`);
 
     // Get any course for this department
     const course = await Course.findOne({
@@ -126,11 +140,16 @@ exports.markSimpleAttendance = async (req, res, next) => {
     });
 
     if (!course) {
+      console.error('❌ No course found for department:', section.departmentId);
       return next(new ErrorResponse('No course found for this department', 404));
     }
 
+    console.log(`✅ Course found: ${course.name} (${course.code})`);
+
     const attendanceDate = date || new Date().toISOString().split('T')[0];
     let markedCount = 0;
+    let updatedCount = 0;
+    let createdCount = 0;
 
     // Mark attendance for each student
     for (const record of attendanceRecords) {
@@ -148,8 +167,9 @@ exports.markSimpleAttendance = async (req, res, next) => {
         // Update existing attendance
         await existing.update({
           status: status,
-          markedBy: facultyUserId
+          markedBy: faculty.id
         });
+        updatedCount++;
       } else {
         // Create new attendance with courseId
         await Attendance.create({
@@ -158,25 +178,30 @@ exports.markSimpleAttendance = async (req, res, next) => {
           facultyId: faculty.id,
           attendanceDate: attendanceDate,
           status: status,
-          markedBy: facultyUserId,
+          markedBy: faculty.id,
           period: 1,
           classType: 'theory'
         });
+        createdCount++;
       }
       markedCount++;
     }
+
+    console.log(`✅ Attendance saved: ${createdCount} created, ${updatedCount} updated (Total: ${markedCount})`);
 
     res.status(200).json({
       success: true,
       message: `Attendance marked for ${markedCount} students`,
       data: {
         marked: markedCount,
+        created: createdCount,
+        updated: updatedCount,
         date: attendanceDate,
         sectionId: sectionId
       }
     });
   } catch (error) {
-    console.error('Error marking attendance:', error);
+    console.error('❌ Error marking attendance:', error);
     next(error);
   }
 };

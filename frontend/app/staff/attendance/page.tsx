@@ -54,12 +54,14 @@ export default function SimpleAttendancePage() {
   const selectedDate = new Date().toISOString().split('T')[0]; // Always today
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   // Mark Attendance Tab
   const [sections, setSections] = useState<Section[]>([]);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<Map<string, string>>(new Map());
+  const [savedAttendanceRecords, setSavedAttendanceRecords] = useState<Map<string, string>>(new Map());
   
   // View Attendance Tab
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -102,11 +104,8 @@ export default function SimpleAttendancePage() {
 
       const response = await api.get(`/api/faculty/attendance/demo/sections/${cseDept.id}`);
       if (response.data.success) {
-        // Filter only the 2024 sections we created (CSE-A1-2024 and CSE-A2-2024)
-        const filtered = response.data.data.filter((s: Section) => 
-          s.code === 'CSE-A1-2024' || s.code === 'CSE-A2-2024'
-        );
-        setSections(filtered);
+        // Show all sections from CSE department
+        setSections(response.data.data);
       }
     } catch (error: any) {
       console.error('Error fetching sections:', error);
@@ -119,26 +118,41 @@ export default function SimpleAttendancePage() {
   const fetchSectionStudents = async (sectionId: string) => {
     try {
       setLoading(true);
+      console.log(`🔄 Fetching students for section ${sectionId} on date ${selectedDate}`);
+      
       const response = await api.get(
         `/api/faculty/attendance/demo/section-students/${sectionId}?date=${selectedDate}`
       );
+
+      console.log(`✅ Received ${response.data.count} students`, response.data);
 
       if (response.data.success) {
         const studentData = response.data.data;
         setStudents(studentData);
 
-        // Only populate if attendance already marked, NO DEFAULT
+        // Load existing attendance from database
         const newRecords = new Map<string, string>();
+        let loadedCount = 0;
+        
         studentData.forEach((student: Student) => {
-          if (student.attendanceStatus) {
+          if (student.attendanceStatus && student.attendanceStatus !== 'not_marked') {
             newRecords.set(student.id, student.attendanceStatus);
+            loadedCount++;
           }
-          // Don't set any default - faculty must mark manually
         });
+        
         setAttendanceRecords(newRecords);
+        setSavedAttendanceRecords(new Map(newRecords)); // Track what's saved in DB
+        setHasUnsavedChanges(false);
+        
+        if (loadedCount > 0) {
+          console.log(`📋 Loaded ${loadedCount} existing attendance records from database`);
+        } else {
+          console.log(`📝 No existing attendance records found - ready for new entry`);
+        }
       }
     } catch (error: any) {
-      console.error('Error fetching students:', error);
+      console.error('❌ Error fetching students:', error);
       alert(error.response?.data?.message || 'Failed to fetch students');
     } finally {
       setLoading(false);
@@ -170,23 +184,9 @@ export default function SimpleAttendancePage() {
       );
 
       if (response.data.success) {
-        // Filter to show only our 120 students from sections A1 and A2
-        const filteredStudents = response.data.data.filter((s: Student) => 
-          s.rollNumber && s.rollNumber.startsWith('CSE2024')
-        );
-        
-        setAllStudents(filteredStudents);
-        
-        // Recalculate stats for filtered students
-        const stats = {
-          total: filteredStudents.length,
-          present: filteredStudents.filter((s: Student) => s.attendanceStatus === 'present').length,
-          absent: filteredStudents.filter((s: Student) => s.attendanceStatus === 'absent').length,
-          late: filteredStudents.filter((s: Student) => s.attendanceStatus === 'late').length,
-          excused: filteredStudents.filter((s: Student) => s.attendanceStatus === 'excused').length,
-          notMarked: filteredStudents.filter((s: Student) => s.attendanceStatus === 'not_marked').length
-        };
-        setStats(stats);
+        // Show all students from the department
+        setAllStudents(response.data.data);
+        setStats(response.data.stats);
       }
     } catch (error: any) {
       console.error('Error fetching department attendance:', error);
@@ -197,9 +197,21 @@ export default function SimpleAttendancePage() {
   };
 
   const handleSectionChange = (sectionId: string) => {
+    // Warn if there are unsaved changes
+    if (attendanceRecords.size > 0 && selectedSection) {
+      const confirmSwitch = window.confirm(
+        `⚠️ You have ${attendanceRecords.size} unsaved attendance records for ${selectedSection.name}.\n\nDo you want to switch sections and lose these changes?`
+      );
+      
+      if (!confirmSwitch) {
+        return; // Don't switch, let user save first
+      }
+    }
+
     const section = sections.find(s => s.id === sectionId);
     if (section) {
       setSelectedSection(section);
+      setAttendanceRecords(new Map()); // Clear records when switching
       fetchSectionStudents(sectionId);
     }
   };
@@ -208,6 +220,7 @@ export default function SimpleAttendancePage() {
     const newRecords = new Map(attendanceRecords);
     newRecords.set(studentId, status);
     setAttendanceRecords(newRecords);
+    setHasUnsavedChanges(true); // Mark as having unsaved changes
   };
 
   const markAllPresent = () => {
@@ -216,6 +229,7 @@ export default function SimpleAttendancePage() {
       newRecords.set(student.id, 'present');
     });
     setAttendanceRecords(newRecords);
+    setHasUnsavedChanges(true);
   };
 
   const markAllAbsent = () => {
@@ -224,11 +238,18 @@ export default function SimpleAttendancePage() {
       newRecords.set(student.id, 'absent');
     });
     setAttendanceRecords(newRecords);
+    setHasUnsavedChanges(true);
   };
 
   const handleSubmit = async () => {
     if (!selectedSection) {
       alert('Please select a section');
+      return;
+    }
+
+    // Validate that we have attendance records to save
+    if (attendanceRecords.size === 0) {
+      alert('⚠️ No attendance records to save. Please mark attendance for at least one student.');
       return;
     }
 
@@ -239,20 +260,34 @@ export default function SimpleAttendancePage() {
         status
       }));
 
+      console.log('📤 Sending attendance data:', {
+        sectionId: selectedSection.id,
+        sectionName: selectedSection.name,
+        date: selectedDate,
+        recordsCount: attendanceData.length
+      });
+
       const response = await api.post('/api/faculty/attendance/demo/mark', {
         sectionId: selectedSection.id,
         date: selectedDate,
         attendanceRecords: attendanceData
       });
 
+      console.log('📥 Response received:', response.data);
+
       if (response.data.success) {
-        alert(`✅ Attendance marked for ${response.data.data.marked} students!`);
+        alert(`✅ Attendance marked for ${response.data.data.marked} students!\n\nCreated: ${response.data.data.created || 0}\nUpdated: ${response.data.data.updated || 0}`);
+        
+        // Update saved records and clear unsaved flag
+        setSavedAttendanceRecords(new Map(attendanceRecords));
+        setHasUnsavedChanges(false);
+        
         // Refresh both the section students AND the department view
         await fetchSectionStudents(selectedSection.id);
         await fetchDepartmentAttendance();
       }
     } catch (error: any) {
-      console.error('Error marking attendance:', error);
+      console.error('❌ Error marking attendance:', error);
       alert(error.response?.data?.message || 'Failed to mark attendance');
     } finally {
       setSaving(false);
@@ -453,8 +488,21 @@ export default function SimpleAttendancePage() {
                     </Table>
                   </div>
 
-                  <div className="flex justify-end mt-4">
-                    <Button onClick={handleSubmit} disabled={saving} size="lg">
+                  <div className="flex justify-between items-center mt-4">
+                    {hasUnsavedChanges && (
+                      <div className="text-sm text-orange-600 font-medium">
+                        ⚠️ You have unsaved changes
+                      </div>
+                    )}
+                    {!hasUnsavedChanges && attendanceRecords.size > 0 && (
+                      <div className="text-sm text-green-600 font-medium">
+                        ✅ All changes saved
+                      </div>
+                    )}
+                    {!hasUnsavedChanges && attendanceRecords.size === 0 && (
+                      <div></div>
+                    )}
+                    <Button onClick={handleSubmit} disabled={saving || !hasUnsavedChanges} size="lg">
                       <Save className={`h-4 w-4 mr-2 ${saving ? 'animate-spin' : ''}`} />
                       {saving ? 'Saving...' : 'Save Attendance'}
                     </Button>
