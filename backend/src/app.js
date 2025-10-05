@@ -7,6 +7,7 @@ const compression = require('compression');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./shared/db/swagger.json');
 const errorHandler = require('./shared/middleware/errorHandler');
+const { databaseErrorHandler, checkDatabaseConnection } = require('./shared/middleware/databaseErrorHandler');
 const { connectDatabases } = require('./shared/db/database');
 const { initializeRolesAndPermissions } = require('./shared/utils/setupRoles');
 
@@ -38,6 +39,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Database connection check middleware (applied to all routes except health)
+app.use(checkDatabaseConnection);
+
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
@@ -65,39 +69,94 @@ app.use('/api/dashboard', require('./dashboard/routes'));
 // Backward compatibility routes
 app.use('/api/courses', require('./academic/routes/courseRoutes'));
 app.use('/api/departments', require('./academic/routes/departmentRoutes'));
+app.use('/api/sections', require('./academic/routes/sectionRoutes'));
 app.use('/api/classrooms', require('./academic/routes/classroomRoutes'));
 app.use('/api/timetable', require('./academic/routes/timetableRoutes'));
 app.use('/api/faculty', require('./faculty/routes/facultyRoutes'));
-app.use('/api/assignments', require('./faculty/routes/assignmentRoutes'));
 app.use('/api/faculty/attendance', require('./faculty/routes/attendanceRoutes'));
 app.use('/api/attendance', require('./students/routes/attendanceRoutes'));
+app.use('/api/student', require('./students/routes/studentPayRoutes'));
 app.use('/api/exams', require('./examinations/routes/examRoutes'));
 app.use('/api/library', require('./library/routes/libraryRoutes'));
 app.use('/api/labs', require('./laboratory/routes/labRoutes'));
 app.use('/api/colleges', require('./administration/routes/collegeRoutes'));
 
+// Test routes for MongoDB verification
+app.use('/api', require('./shared/routes/testRoutes'));
+
 // Health check route
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Server is running', 
-    environment: process.env.NODE_ENV,
-    architecture: 'modular',
-    modules: [
-      'admissions',
-      'fees', 
-      'hostel',
-      'academic',
-      'students',
-      'faculty',
-      'examinations',
-      'library',
-      'laboratory',
-      'administration',
-      'shared'
-    ]
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const { checkDatabaseHealth, getPoolHealth } = require('./shared/db/database');
+    const dbMonitor = require('./shared/utils/databaseMonitor');
+    
+    const dbHealth = await checkDatabaseHealth();
+    const poolHealth = getPoolHealth();
+    const monitorStats = dbMonitor.getStats();
+    const healthCheck = await dbMonitor.healthCheck();
+    
+    res.status(200).json({ 
+      status: 'ok', 
+      message: 'Server is running', 
+      environment: process.env.NODE_ENV,
+      architecture: 'modular',
+      database: {
+        ...dbHealth,
+        pool: poolHealth,
+        monitoring: monitorStats,
+        healthCheck: healthCheck
+      },
+      timestamp: new Date().toISOString(),
+      modules: [
+        'admissions',
+        'fees', 
+        'hostel',
+        'academic',
+        'students',
+        'faculty',
+        'examinations',
+        'library',
+        'laboratory',
+        'administration',
+        'shared'
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
 });
+
+// Database monitoring endpoint (development only)
+if (process.env.NODE_ENV === 'development') {
+  app.get('/api/monitor/database', async (req, res) => {
+    try {
+      const { getPoolHealth } = require('./shared/db/database');
+      const dbMonitor = require('./shared/utils/databaseMonitor');
+      const poolHealth = getPoolHealth();
+      const stats = dbMonitor.getStats();
+      const healthCheck = await dbMonitor.healthCheck();
+      
+      res.json({
+        success: true,
+        data: {
+          pool: poolHealth,
+          stats,
+          healthCheck,
+          recommendations: []
+        }
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+}
 
 // Handle undefined routes
 app.use('*', (req, res, next) => {
@@ -106,6 +165,9 @@ app.use('*', (req, res, next) => {
     message: `Route ${req.originalUrl} not found` 
   });
 });
+
+// Database error handling middleware (must come before general error handler)
+app.use(databaseErrorHandler);
 
 // Error handling middleware
 app.use(errorHandler);

@@ -1,1 +1,0 @@
-psql -d "onchain_erp" -c "\q"

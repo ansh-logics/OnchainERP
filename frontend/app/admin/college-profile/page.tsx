@@ -104,7 +104,12 @@ export default function CollegeProfilePage() {
       setUser(currentUser);
       
       // Fetch college profile data using collegeId from user or setup-status
-      let collegeIdToFetch = currentUser.collegeId || currentUser.college?.id;
+      let collegeIdToFetch;
+      if (currentUser.collegeId) {
+        collegeIdToFetch = typeof currentUser.collegeId === 'object' ? (currentUser.collegeId as any)?.id : currentUser.collegeId;
+      } else if (currentUser.college?.id) {
+        collegeIdToFetch = currentUser.college.id;
+      }
       
       // If no collegeId in user object, fetch from setup-status first
       if (!collegeIdToFetch) {
@@ -389,7 +394,7 @@ export default function CollegeProfilePage() {
                     <Label htmlFor="collegeName">College Name</Label>
                     <Input 
                       id="collegeName"
-                      value={college.name}
+                      value={college.name || ''}
                       onChange={(e) => updateCollegeField('name', e.target.value)}
                       disabled={!isEditing}
                       className={isEditing ? "" : "bg-gray-50"}
@@ -399,7 +404,7 @@ export default function CollegeProfilePage() {
                     <Label htmlFor="establishedYear">Established Year</Label>
                     <Input 
                       id="establishedYear"
-                      value={college.establishedYear.toString()}
+                      value={college.establishedYear?.toString() || ''}
                       onChange={(e) => updateCollegeField('establishedYear', parseInt(e.target.value) || 0)}
                       disabled={!isEditing}
                       className={isEditing ? "" : "bg-gray-50"}
@@ -721,7 +726,7 @@ export default function CollegeProfilePage() {
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                       {college.letterhead ? (
                         <div className="space-y-4">
-                          {college.letterhead.endsWith('.pdf') ? (
+                          {college.letterhead?.endsWith('.pdf') ? (
                             <div className="h-24 w-24 mx-auto bg-red-100 rounded-lg flex items-center justify-center">
                               <span className="text-red-600 font-medium text-xs">PDF</span>
                             </div>

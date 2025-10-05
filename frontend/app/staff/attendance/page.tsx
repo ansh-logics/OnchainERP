@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,20 +18,33 @@ import {
   Save,
   RefreshCw,
   Users,
-  CalendarDays
+  CalendarDays,
+  BookOpen,
+  TrendingUp
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getCurrentUser } from '@/lib/auth';
 
-interface Section {
+interface TimetableClass {
+  id: string;
+  period: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  classType: string;
+  course: {
+    id: string;
+    code: string;
+    name: string;
+    courseType: string;
+  };
+  section: {
     id: string;
     name: string;
     code: string;
     batch: string;
     semester: number;
     currentStrength: number;
-  department: {
-    name: string;
-    code: string;
   };
 }
 
@@ -41,178 +55,201 @@ interface Student {
   name: string;
   email: string;
   batch: string;
-  section?: {
+  currentSemester: number;
+  attendance?: {
+    id: string;
+    status: string;
+    topic?: string;
+    classType: string;
+    markedAt: string;
+  } | null;
+}
+
+interface AttendanceRecord {
+  studentId: string;
+  status: string;
+}
+
+interface Section {
+  id: string;
+  name: string;
+  code: string;
+  semester: number;
+  currentStrength: number;
+  department: {
     name: string;
     code: string;
   };
-  sectionCode?: string;
-  attendanceStatus?: string | null;
 }
 
-export default function SimpleAttendancePage() {
+interface SectionAttendanceData {
+  student: {
+    id: string;
+    rollNumber: string;
+    name: string;
+    email: string;
+  };
+  subjects: {
+    [subjectCode: string]: {
+      present: number;
+      total: number;
+      percentage: number;
+    };
+  };
+  overallPresent: number;
+  overallTotal: number;
+  overallPercentage: number;
+}
+
+export default function PeriodWiseAttendancePage() {
+  // User state
+  const [user, setUser] = useState<any>(null);
+
   // Common states
-  const selectedDate = new Date().toISOString().split('T')[0]; // Always today
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
-  // Mark Attendance Tab
-  const [sections, setSections] = useState<Section[]>([]);
-  const [selectedSection, setSelectedSection] = useState<Section | null>(null);
+  // Period-wise attendance states
+  const [classes, setClasses] = useState<TimetableClass[]>([]);
+  const [selectedClass, setSelectedClass] = useState<TimetableClass | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<Map<string, string>>(new Map());
-  const [savedAttendanceRecords, setSavedAttendanceRecords] = useState<Map<string, string>>(new Map());
-  
-  // View Attendance Tab
-  const [allStudents, setAllStudents] = useState<Student[]>([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    present: 0,
-    absent: 0,
-    late: 0,
-    excused: 0,
-    notMarked: 0
-  });
+  const [topic, setTopic] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Hardcoded department ID for demo (CSE department)
-  const DEPARTMENT_ID = 'your-cse-department-id'; // This will be fetched dynamically
+  // Section-wise view states
+  const [sections, setSections] = useState<Section[]>([]);
+  const [selectedSection, setSelectedSection] = useState<Section | null>(null);
+  const [sectionAttendanceData, setSectionAttendanceData] = useState<SectionAttendanceData[]>([]);
+  const [sectionLoading, setSectionLoading] = useState(false);
 
   useEffect(() => {
-    fetchSections();
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
   }, []);
 
-  const fetchSections = async () => {
+  useEffect(() => {
+    if (user) {
+      fetchFacultyClasses();
+    }
+  }, [user, selectedDate]);
+
+  // Auto-select first class when classes change
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      const firstClass = classes[0];
+      setSelectedClass(firstClass);
+      fetchClassStudents(firstClass);
+    }
+  }, [classes]);
+
+  const fetchFacultyClasses = async () => {
     try {
       setLoading(true);
+      console.log(`📅 Fetching classes for date: ${selectedDate}`);
       
-      // Get CSE department sections directly
-      const deptResponse = await api.get('/api/departments');
-      console.log('Departments:', deptResponse.data);
+      const response = await api.get(`/api/faculty/attendance/classes?date=${selectedDate}`);
       
-      if (!deptResponse.data.data || deptResponse.data.data.length === 0) {
-        alert('No departments found.');
-        return;
-      }
-
-      // Find CSE department
-      const cseDept = deptResponse.data.data.find((d: any) => d.code === 'CSE');
-      
-      if (!cseDept) {
-        alert('CSE department not found. Using first department...');
-        return;
-      }
-
-      const response = await api.get(`/api/faculty/attendance/demo/sections/${cseDept.id}`);
       if (response.data.success) {
-        // Show all sections from CSE department
-        setSections(response.data.data);
+        const fetchedClasses = response.data.data;
+        setClasses(fetchedClasses);
+        console.log(`✅ Found ${fetchedClasses.length} classes for today`);
+        
+        // Clear selected class and students when date changes
+        setSelectedClass(null);
+        setStudents([]);
+        setAttendanceRecords(new Map());
       }
     } catch (error: any) {
-      console.error('Error fetching sections:', error);
-      alert(error.response?.data?.message || 'Failed to fetch sections');
+      console.error('❌ Error fetching classes:', error);
+      alert(error.response?.data?.message || 'Failed to fetch classes');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchSectionStudents = async (sectionId: string) => {
+  const fetchClassStudents = async (classData: TimetableClass) => {
     try {
       setLoading(true);
-      console.log(`🔄 Fetching students for section ${sectionId} on date ${selectedDate}`);
+      console.log(`📚 Fetching students for class:`, {
+        courseCode: classData.course.code,
+        courseId: classData.course.id,
+        sectionId: classData.section.id,
+        period: classData.period,
+        date: selectedDate
+      });
       
       const response = await api.get(
-        `/api/faculty/attendance/demo/section-students/${sectionId}?date=${selectedDate}`
+        `/api/faculty/attendance/students/${classData.course.id}/${classData.section.id}?date=${selectedDate}&period=${classData.period}`
       );
 
-      console.log(`✅ Received ${response.data.count} students`, response.data);
+      console.log('📥 Students API response:', response.data);
 
       if (response.data.success) {
         const studentData = response.data.data;
         setStudents(studentData);
+        console.log(`✅ Loaded ${studentData.length} students`);
 
         // Load existing attendance from database
         const newRecords = new Map<string, string>();
         let loadedCount = 0;
         
         studentData.forEach((student: Student) => {
-          if (student.attendanceStatus && student.attendanceStatus !== 'not_marked') {
-            newRecords.set(student.id, student.attendanceStatus);
+          if (student.attendance) {
+            newRecords.set(student.id, student.attendance.status);
             loadedCount++;
           }
         });
         
         setAttendanceRecords(newRecords);
-        setSavedAttendanceRecords(new Map(newRecords)); // Track what's saved in DB
         setHasUnsavedChanges(false);
         
         if (loadedCount > 0) {
-          console.log(`📋 Loaded ${loadedCount} existing attendance records from database`);
+          console.log(`📋 Loaded ${loadedCount} existing attendance records`);
         } else {
-          console.log(`📝 No existing attendance records found - ready for new entry`);
+          console.log(`📝 No existing attendance - ready for marking`);
         }
       }
     } catch (error: any) {
       console.error('❌ Error fetching students:', error);
-      alert(error.response?.data?.message || 'Failed to fetch students');
+      console.error('Error details:', error.response?.data);
+      
+      // Clear students on error
+      setStudents([]);
+      setAttendanceRecords(new Map());
+      
+      const errorMessage = error.response?.data?.message || 'Failed to fetch students';
+      alert(`Error: ${errorMessage}\n\nPlease check console for details.`);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchDepartmentAttendance = async () => {
-    try {
-      setLoading(true);
-      
-      // Get CSE department
-      const deptResponse = await api.get('/api/departments');
-      
-      if (!deptResponse.data.data || deptResponse.data.data.length === 0) {
-        alert('No departments found.');
-        return;
-      }
-
-      // Find CSE department
-      const cseDept = deptResponse.data.data.find((d: any) => d.code === 'CSE');
-      
-      if (!cseDept) {
-        alert('CSE department not found.');
-        return;
-      }
-
-      const response = await api.get(
-        `/api/faculty/attendance/demo/department-attendance/${cseDept.id}?date=${selectedDate}`
-      );
-
-      if (response.data.success) {
-        // Show all students from the department
-        setAllStudents(response.data.data);
-        setStats(response.data.stats);
-      }
-    } catch (error: any) {
-      console.error('Error fetching department attendance:', error);
-      alert(error.response?.data?.message || 'Failed to fetch attendance');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSectionChange = (sectionId: string) => {
-    // Warn if there are unsaved changes
-    if (attendanceRecords.size > 0 && selectedSection) {
+  const handleClassSelect = (classId: string) => {
+    console.log('🖱️ Class card clicked:', classId);
+    
+    if (hasUnsavedChanges) {
       const confirmSwitch = window.confirm(
-        `⚠️ You have ${attendanceRecords.size} unsaved attendance records for ${selectedSection.name}.\n\nDo you want to switch sections and lose these changes?`
+        '⚠️ You have unsaved attendance records.\n\nDo you want to switch classes and lose these changes?'
       );
       
       if (!confirmSwitch) {
-        return; // Don't switch, let user save first
+        console.log('⏸️ Class switch cancelled by user');
+        return;
       }
     }
 
-    const section = sections.find(s => s.id === sectionId);
-    if (section) {
-      setSelectedSection(section);
-      setAttendanceRecords(new Map()); // Clear records when switching
-      fetchSectionStudents(sectionId);
+    const classData = classes.find(c => c.id === classId);
+    if (classData) {
+      console.log('✅ Setting selected class:', classData.course.code, '-', classData.section.name);
+      setSelectedClass(classData);
+      setAttendanceRecords(new Map());
+      setTopic('');
+      setStudents([]); // Clear previous students immediately
+      fetchClassStudents(classData);
+    } else {
+      console.error('❌ Class not found for ID:', classId);
     }
   };
 
@@ -220,11 +257,11 @@ export default function SimpleAttendancePage() {
     const newRecords = new Map(attendanceRecords);
     newRecords.set(studentId, status);
     setAttendanceRecords(newRecords);
-    setHasUnsavedChanges(true); // Mark as having unsaved changes
+    setHasUnsavedChanges(true);
   };
 
   const markAllPresent = () => {
-    const newRecords = new Map(attendanceRecords); // Keep existing selections
+    const newRecords = new Map<string, string>();
     students.forEach(student => {
       newRecords.set(student.id, 'present');
     });
@@ -233,7 +270,7 @@ export default function SimpleAttendancePage() {
   };
 
   const markAllAbsent = () => {
-    const newRecords = new Map(attendanceRecords); // Keep existing selections
+    const newRecords = new Map<string, string>();
     students.forEach(student => {
       newRecords.set(student.id, 'absent');
     });
@@ -242,12 +279,11 @@ export default function SimpleAttendancePage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedSection) {
-      alert('Please select a section');
+    if (!selectedClass) {
+      alert('Please select a class');
       return;
     }
 
-    // Validate that we have attendance records to save
     if (attendanceRecords.size === 0) {
       alert('⚠️ No attendance records to save. Please mark attendance for at least one student.');
       return;
@@ -255,36 +291,37 @@ export default function SimpleAttendancePage() {
 
     try {
       setSaving(true);
-      const attendanceData = Array.from(attendanceRecords.entries()).map(([studentId, status]) => ({
+      const attendanceData: AttendanceRecord[] = Array.from(attendanceRecords.entries()).map(([studentId, status]) => ({
         studentId,
         status
       }));
 
-      console.log('📤 Sending attendance data:', {
-        sectionId: selectedSection.id,
-        sectionName: selectedSection.name,
+      console.log('📤 Submitting attendance:', {
+        courseId: selectedClass.course.id,
+        sectionId: selectedClass.section.id,
         date: selectedDate,
+        period: selectedClass.period,
+        classType: selectedClass.classType,
+        topic: topic,
         recordsCount: attendanceData.length
       });
 
-      const response = await api.post('/api/faculty/attendance/demo/mark', {
-        sectionId: selectedSection.id,
+      const response = await api.post('/api/faculty/attendance/mark', {
+        courseId: selectedClass.course.id,
+        sectionId: selectedClass.section.id,
         date: selectedDate,
+        period: selectedClass.period,
+        classType: selectedClass.classType,
+        topic: topic,
         attendanceRecords: attendanceData
       });
 
-      console.log('📥 Response received:', response.data);
-
       if (response.data.success) {
-        alert(`✅ Attendance marked for ${response.data.data.marked} students!\n\nCreated: ${response.data.data.created || 0}\nUpdated: ${response.data.data.updated || 0}`);
-        
-        // Update saved records and clear unsaved flag
-        setSavedAttendanceRecords(new Map(attendanceRecords));
+        alert(`✅ Attendance marked successfully for ${response.data.data.marked} students!`);
         setHasUnsavedChanges(false);
         
-        // Refresh both the section students AND the department view
-        await fetchSectionStudents(selectedSection.id);
-        await fetchDepartmentAttendance();
+        // Refresh the students list to show updated attendance
+        await fetchClassStudents(selectedClass);
       }
     } catch (error: any) {
       console.error('❌ Error marking attendance:', error);
@@ -294,13 +331,13 @@ export default function SimpleAttendancePage() {
     }
   };
 
-  const getAttendanceColor = (status: string | null | undefined) => {
+  const getStatusColor = (status: string) => {
       switch (status) {
-      case 'present': return 'text-green-600 bg-green-50';
-      case 'absent': return 'text-red-600 bg-red-50';
-      case 'late': return 'text-orange-600 bg-orange-50';
-      case 'excused': return 'text-blue-600 bg-blue-50';
-      default: return 'text-gray-600 bg-gray-50';
+      case 'present': return 'text-green-600 bg-green-50 border-green-200';
+      case 'absent': return 'text-red-600 bg-red-50 border-red-200';
+      case 'late': return 'text-orange-600 bg-orange-50 border-orange-200';
+      case 'excused': return 'text-blue-600 bg-blue-50 border-blue-200';
+      default: return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   };
 
@@ -312,65 +349,188 @@ export default function SimpleAttendancePage() {
     excused: Array.from(attendanceRecords.values()).filter(s => s === 'excused').length,
   };
 
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Attendance Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Simple attendance system for demo
-          </p>
-        </div>
-      </div>
+  const fetchSections = async () => {
+    try {
+      setSectionLoading(true);
+      
+      // Get faculty's department
+      const facultyResponse = await api.get('/api/faculty/profile');
+      if (!facultyResponse.data.success) {
+        throw new Error('Failed to fetch faculty profile');
+      }
 
-      <Tabs defaultValue="mark" className="space-y-6">
+      const departmentId = facultyResponse.data.data.departmentId;
+      
+      // Fetch sections for this department
+      const response = await api.get(`/api/sections?departmentId=${departmentId}`);
+      
+      if (response.data.success) {
+        setSections(response.data.data);
+        console.log(`✅ Loaded ${response.data.data.length} sections`);
+      }
+    } catch (error: any) {
+      console.error('Error fetching sections:', error);
+      alert(error.response?.data?.message || 'Failed to fetch sections');
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
+  const fetchSectionAttendance = async (section: Section) => {
+    try {
+      setSectionLoading(true);
+      console.log(`📊 Fetching attendance for section: ${section.name}`);
+
+      const response = await api.get(
+        `/api/faculty/attendance/summary/section/${section.id}?startDate=${selectedDate}&endDate=${selectedDate}`
+      );
+
+      console.log('📥 Section attendance response:', response.data);
+
+      if (response.data.success) {
+        // Transform the data for display
+        const students = response.data.data.students || [];
+        setSectionAttendanceData(students);
+        console.log(`✅ Loaded attendance for ${students.length} students`);
+      }
+    } catch (error: any) {
+      console.error('Error fetching section attendance:', error);
+      console.error('Error details:', error.response?.data);
+      alert(error.response?.data?.message || 'Failed to fetch section attendance');
+    } finally {
+      setSectionLoading(false);
+    }
+  };
+
+  const handleSectionSelect = (section: Section) => {
+    console.log('🖱️ Section card clicked:', section.name);
+    setSelectedSection(section);
+    fetchSectionAttendance(section);
+  };
+
+  const percentage = currentStats.total > 0 
+    ? ((currentStats.present / currentStats.total) * 100).toFixed(1)
+    : '0';
+
+  return (
+    <DashboardLayout userRole={user?.role || 'faculty'} title="Attendance Management">
+      <Tabs defaultValue="period-wise" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="mark">
+          <TabsTrigger value="period-wise">
             <CalendarDays className="h-4 w-4 mr-2" />
-            Mark Attendance
+            Mark Attendance (Period-wise)
           </TabsTrigger>
-          <TabsTrigger value="view" onClick={() => fetchDepartmentAttendance()}>
+          <TabsTrigger value="section-wise" onClick={fetchSections}>
             <Users className="h-4 w-4 mr-2" />
-            View Department Attendance
+            View by Section
           </TabsTrigger>
         </TabsList>
 
-        {/* MARK ATTENDANCE TAB */}
-        <TabsContent value="mark" className="space-y-6">
+        {/* PERIOD-WISE TAB */}
+        <TabsContent value="period-wise">
+      <div className="space-y-6">
+
+        {/* Date Selection */}
           <Card>
             <CardHeader>
-              <CardTitle>Select Section</CardTitle>
-              <CardDescription>Choose a section to mark attendance</CardDescription>
+            <CardTitle>Select Date</CardTitle>
+            <CardDescription>Choose a date to view and mark attendance</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <Label htmlFor="attendance-date">Date</Label>
+                <Input
+                  id="attendance-date"
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div className="pt-6">
+                <Button onClick={fetchFacultyClasses} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh Classes
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Classes for Selected Date */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Classes - {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</CardTitle>
+            <CardDescription>{classes.length} classes scheduled</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {classes.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {classes.map((classData) => (
+                  <Card
+                    key={classData.id}
+                    className={`cursor-pointer transition-all hover:shadow-md ${
+                      selectedClass?.id === classData.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    }`}
+                    onClick={() => handleClassSelect(classData.id)}
+                  >
+                    <CardContent className="pt-6">
                 <div className="space-y-2">
-                <Label>Select Section to Mark Attendance</Label>
-                <Select value={selectedSection?.id} onValueChange={handleSectionChange}>
-                    <SelectTrigger>
-                    <SelectValue placeholder="Choose Section A or Section B" />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {sections.map((section) => (
-                      <SelectItem key={section.id} value={section.id}>
-                        {section.name} ({section.currentStrength} students)
-                      </SelectItem>
-                    ))}
-                    </SelectContent>
-                  </Select>
+                        <div className="flex items-center justify-between">
+                          <Badge variant="outline">Period {classData.period}</Badge>
+                          <Badge className={getStatusColor(classData.classType)}>
+                            {classData.classType}
+                          </Badge>
+                        </div>
+                        <h3 className="font-semibold text-lg">{classData.course.code}</h3>
+                        <p className="text-sm text-muted-foreground">{classData.course.name}</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            {classData.startTime} - {classData.endTime}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{classData.section.name} ({classData.section.currentStrength} students)</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <CalendarDays className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No classes scheduled for this date</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Loading State */}
+        {selectedClass && loading && students.length === 0 && (
+          <Card>
+            <CardContent className="py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading students for {selectedClass.course.code}...</p>
               </div>
             </CardContent>
           </Card>
+        )}
 
-          {selectedSection && students.length > 0 && (
+        {/* Attendance Marking Section */}
+        {selectedClass && students.length > 0 && (
             <>
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <Card>
                   <CardContent className="pt-6">
                     <div className="text-center">
                       <Users className="h-8 w-8 mx-auto mb-2 text-blue-500" />
                       <p className="text-2xl font-bold">{currentStats.total}</p>
-                      <p className="text-sm text-muted-foreground">Total</p>
+                    <p className="text-sm text-muted-foreground">Marked</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -414,13 +574,26 @@ export default function SimpleAttendancePage() {
                     </div>
                   </CardContent>
                 </Card>
-              </div>
 
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center">
+                    <TrendingUp className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                    <p className="text-2xl font-bold">{percentage}%</p>
+                    <p className="text-sm text-muted-foreground">Present %</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Students Table */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Students - {selectedSection.name}</CardTitle>
+                    <CardTitle>
+                      {selectedClass.course.code} - {selectedClass.section.name} - Period {selectedClass.period}
+                    </CardTitle>
                       <CardDescription>{students.length} students</CardDescription>
                     </div>
                     <div className="flex gap-2">
@@ -435,22 +608,42 @@ export default function SimpleAttendancePage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+              <CardContent className="space-y-4">
+                {/* Topic Input */}
+                <div>
+                  <Label htmlFor="topic">Topic Covered (Optional)</Label>
+                  <Input
+                    id="topic"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="E.g., Introduction to Data Structures"
+                    className="mt-1"
+                  />
+                </div>
+
+                {/* Students Table */}
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Roll No.</TableHead>
+                        <TableHead className="w-[100px]">Roll No.</TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Enrollment No.</TableHead>
-                          <TableHead>Attendance</TableHead>
+                        <TableHead className="w-[300px]">Attendance</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {students.map((student) => (
-                          <TableRow key={student.id}>
-                            <TableCell className="font-medium">{student.rollNumber}</TableCell>
-                            <TableCell>{student.name}</TableCell>
+                        <TableRow key={student.id}>
+                          <TableCell className="font-medium">{student.rollNumber}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold text-sm">
+                                {student.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span>{student.name}</span>
+                            </div>
+                          </TableCell>
                             <TableCell className="text-muted-foreground">
                               {student.enrollmentNumber}
                             </TableCell>
@@ -462,7 +655,8 @@ export default function SimpleAttendancePage() {
                                   onClick={() => handleAttendanceChange(student.id, 'present')}
                                   className={attendanceRecords.get(student.id) === 'present' ? 'bg-green-600 hover:bg-green-700' : ''}
                                 >
-                                  <CheckCircle2 className="h-4 w-4" />
+                                <CheckCircle2 className="h-4 w-4 mr-1" />
+                                Present
                                 </Button>
                                 <Button
                                   size="sm"
@@ -470,7 +664,8 @@ export default function SimpleAttendancePage() {
                                   onClick={() => handleAttendanceChange(student.id, 'absent')}
                                   className={attendanceRecords.get(student.id) === 'absent' ? 'bg-red-600 hover:bg-red-700' : ''}
                                 >
-                                  <XCircle className="h-4 w-4" />
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Absent
                                 </Button>
                                 <Button
                                   size="sm"
@@ -478,7 +673,8 @@ export default function SimpleAttendancePage() {
                                   onClick={() => handleAttendanceChange(student.id, 'late')}
                                   className={attendanceRecords.get(student.id) === 'late' ? 'bg-orange-600 hover:bg-orange-700' : ''}
                                 >
-                                  <Clock className="h-4 w-4" />
+                                <Clock className="h-4 w-4 mr-1" />
+                                Late
                                 </Button>
                               </div>
                             </TableCell>
@@ -488,7 +684,8 @@ export default function SimpleAttendancePage() {
                     </Table>
                   </div>
 
-                  <div className="flex justify-between items-center mt-4">
+                {/* Save Button */}
+                <div className="flex justify-between items-center pt-4 border-t">
                     {hasUnsavedChanges && (
                       <div className="text-sm text-orange-600 font-medium">
                         ⚠️ You have unsaved changes
@@ -512,138 +709,168 @@ export default function SimpleAttendancePage() {
             </>
           )}
 
-          {selectedSection && students.length === 0 && !loading && (
+        {selectedClass && students.length === 0 && !loading && (
             <Card>
               <CardContent className="py-12">
                 <div className="text-center text-muted-foreground">
                   <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No students found in this section</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* VIEW ATTENDANCE TAB */}
-        <TabsContent value="view" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Department Attendance</CardTitle>
-                  <CardDescription>Combined view of all sections</CardDescription>
-                </div>
-                <Button onClick={fetchDepartmentAttendance} disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
+                <p className="font-medium">No students found in this section</p>
+                <p className="text-sm mt-2">
+                  Section: {selectedClass.section.name} | Course: {selectedClass.course.code}
+                </p>
+                <p className="text-sm mt-1">
+                  Please ensure students are enrolled in this section.
+                </p>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <Users className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-                      <p className="text-xl font-bold">{stats.total}</p>
-                      <p className="text-xs text-muted-foreground">Total</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-500" />
-                      <p className="text-xl font-bold">{stats.present}</p>
-                      <p className="text-xs text-muted-foreground">Present</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <XCircle className="h-6 w-6 mx-auto mb-2 text-red-500" />
-                      <p className="text-xl font-bold">{stats.absent}</p>
-                      <p className="text-xs text-muted-foreground">Absent</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <Clock className="h-6 w-6 mx-auto mb-2 text-orange-500" />
-                      <p className="text-xl font-bold">{stats.late}</p>
-                      <p className="text-xs text-muted-foreground">Late</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <FileCheck className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-                      <p className="text-xl font-bold">{stats.excused}</p>
-                      <p className="text-xs text-muted-foreground">Excused</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <div className="h-6 w-6 mx-auto mb-2 rounded-full bg-gray-200" />
-                      <p className="text-xl font-bold">{stats.notMarked}</p>
-                      <p className="text-xs text-muted-foreground">Not Marked</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* All Students Table */}
-              <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-white z-10">
-                    <TableRow>
-                      <TableHead>Roll No.</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Section</TableHead>
-                      <TableHead>Enrollment No.</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allStudents.map((student) => (
-                      <TableRow key={student.id}>
-                        <TableCell className="font-medium">{student.rollNumber}</TableCell>
-                        <TableCell>{student.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{student.section}</Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {student.enrollmentNumber}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getAttendanceColor(student.attendanceStatus)}>
-                            {student.attendanceStatus === 'not_marked' ? 'Not Marked' : 
-                             student.attendanceStatus || 'Not Marked'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {allStudents.length === 0 && !loading && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No students found</p>
-                </div>
-              )}
             </CardContent>
           </Card>
+        )}
+      </div>
+        </TabsContent>
+
+        {/* SECTION-WISE TAB */}
+        <TabsContent value="section-wise">
+          <div className="space-y-6">
+            {/* Section Cards */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Select Section to View Attendance</CardTitle>
+                <CardDescription>Click on a section to view comprehensive attendance data</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {sectionLoading && !selectedSection ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading sections...</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {sections.map((section) => (
+                      <Card
+                        key={section.id}
+                        className={`cursor-pointer transition-all hover:shadow-lg ${
+                          selectedSection?.id === section.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                        }`}
+                        onClick={() => handleSectionSelect(section)}
+                      >
+                        <CardContent className="pt-6">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-semibold text-lg">{section.name}</h3>
+                              <Badge variant="outline">Sem {section.semester}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{section.code}</p>
+                            <div className="flex items-center gap-2 text-sm">
+                              <Users className="h-4 w-4 text-muted-foreground" />
+                              <span>{section.currentStrength} students</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+
+                {sections.length === 0 && !sectionLoading && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No sections found for your department</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Section Attendance Data */}
+            {selectedSection && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{selectedSection.name} - Attendance Overview</CardTitle>
+                      <CardDescription>
+                        Showing attendance data for {selectedDate} | {sectionAttendanceData.length} students
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedSection(null);
+                        setSectionAttendanceData([]);
+                      }}
+                    >
+                      Back to Sections
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {sectionLoading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-muted-foreground">Loading attendance data...</p>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg overflow-hidden max-h-[600px] overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-white z-10">
+                          <TableRow>
+                            <TableHead>Roll No</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead className="text-right">Total Classes</TableHead>
+                            <TableHead className="text-right">Present</TableHead>
+                            <TableHead className="text-right">Absent</TableHead>
+                            <TableHead className="text-right">Attendance %</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sectionAttendanceData.map((studentData: any) => {
+                            const percentage = studentData.overallPercentage || 0;
+                            const statusColor = percentage >= 75 
+                              ? 'bg-green-100 text-green-800' 
+                              : percentage >= 60 
+                              ? 'bg-orange-100 text-orange-800' 
+                              : 'bg-red-100 text-red-800';
+                            
+                            return (
+                              <TableRow key={studentData.student.id}>
+                                <TableCell className="font-medium">{studentData.student.rollNumber}</TableCell>
+                                <TableCell>{studentData.student.name}</TableCell>
+                                <TableCell className="text-right">{studentData.overallTotal || 0}</TableCell>
+                                <TableCell className="text-right text-green-600 font-medium">
+                                  {studentData.overallPresent || 0}
+                                </TableCell>
+                                <TableCell className="text-right text-red-600 font-medium">
+                                  {(studentData.overallTotal || 0) - (studentData.overallPresent || 0)}
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-lg">
+                                  {percentage.toFixed(1)}%
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={statusColor}>
+                                    {percentage >= 75 ? 'Good' : percentage >= 60 ? 'Warning' : 'Critical'}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {sectionAttendanceData.length === 0 && !sectionLoading && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No attendance data found for this section on {selectedDate}</p>
+                      <p className="text-sm mt-2">Try selecting a different date or check if attendance has been marked</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
-    </div>
+    </DashboardLayout>
   );
 }

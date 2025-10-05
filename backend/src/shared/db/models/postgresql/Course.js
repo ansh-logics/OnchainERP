@@ -23,6 +23,14 @@ const Course = sequelize.define('Course', {
       key: 'id'
     }
   },
+  facultyId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'faculty',
+      key: 'id'
+    }
+  },
   
   code: {
     type: DataTypes.STRING,
@@ -116,6 +124,7 @@ const Course = sequelize.define('Course', {
   indexes: [
     { fields: ['collegeId'] },
     { fields: ['departmentId'] },
+    { fields: ['facultyId'] },
     { fields: ['code'] },
     { fields: ['semester'] },
     { fields: ['courseType'] }

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User, Student, Faculty, College, Department } = require('../db/models');
+const { User, Student, Faculty, College, Department, getModel } = require('../db/models');
 const { SystemLog } = require('../db/models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
@@ -182,15 +182,74 @@ exports.login = async (req, res, next) => {
       return next(new ErrorResponse('Please provide an email and password', 400));
     }
 
-    // Check for user
-    const user = await User.findOne({ 
-      where: { email },
-      include: [
-        { association: 'studentProfile' },
-        { association: 'facultyProfile' },
-        { association: 'college', attributes: ['id', 'name', 'shortName'] }
-      ]
-    });
+    // Check for user with intelligent database routing
+    const UserModel = getModel('User');
+    const StudentModel = getModel('Student');
+    const FacultyModel = getModel('Faculty');
+    const CollegeModel = getModel('College');
+    
+    let user;
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const useMongoDB = process.env.USE_MONGODB !== 'false';
+        
+        if (useMongoDB) {
+          // MongoDB query with population
+          user = await UserModel.findOne({ email })
+            .populate('collegeId', 'id name shortName')
+            .select('+password'); // Include password field for authentication
+            
+          // Get student/faculty profiles separately for MongoDB (simplified to avoid recursion)
+          if (user) {
+            if (user.role === 'student') {
+              try {
+                user.studentProfile = await StudentModel.findOne({ userId: user._id }).select('id enrollmentNumber batch program');
+              } catch (error) {
+                console.log('⚠️ Could not load student profile:', error.message);
+                user.studentProfile = null;
+              }
+            } else if (user.role === 'faculty') {
+              try {
+                user.facultyProfile = await FacultyModel.findOne({ userId: user._id }).select('id employeeId designation department');
+              } catch (error) {
+                console.log('⚠️ Could not load faculty profile:', error.message);
+                user.facultyProfile = null;
+              }
+            }
+          }
+        } else {
+          // PostgreSQL query (fallback)
+          user = await UserModel.findOne({ 
+            where: { email },
+            include: [
+              { association: 'studentProfile' },
+              { association: 'facultyProfile' },
+              { association: 'college', attributes: ['id', 'name', 'shortName'] }
+            ],
+            timeout: 15000 // 15 second timeout
+          });
+        }
+        break; // Success, exit retry loop
+      } catch (dbError) {
+        retryCount++;
+        console.error(`[AUTH] Login database query attempt ${retryCount} failed:`, dbError.message);
+        
+        if (dbError.message.includes('out of shared memory') || 
+            dbError.message.includes('connection') ||
+            dbError.name === 'SequelizeDatabaseError') {
+          
+          if (retryCount < maxRetries) {
+            console.log(`[AUTH] Retrying login database query in ${retryCount * 1000}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryCount * 1000));
+            continue;
+          }
+        }
+        throw dbError; // Re-throw if not a retryable error or max retries reached
+      }
+    }
 
     if (!user) {
       return next(new ErrorResponse('Invalid credentials', 401));

@@ -6,24 +6,52 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PaymentModal } from "@/components/payment/payment-modal";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getCurrentUser } from "@/lib/auth";
-import { mockFeeRecords, mockStudent, type FeeRecord } from "@/lib/mock-data";
-import { downloadReceipt } from "@/components/payment/receipt";
+import { mockFeeRecords, mockFeeSummary, mockStudent } from "@/lib/mock-data";
+import { PaymentModal } from "@/components/payment/payment-modal";
+import { RazorpayButton } from "@/components/payment/razorpay-button";
+import { toast } from "sonner";
 import { 
   CreditCard, 
   Download,
   CheckCircle,
   AlertCircle,
   Clock,
-  History
+  History,
+  DollarSign,
+  Loader2
 } from "lucide-react";
+
+interface FeeRecord {
+  id: string;
+  studentId: string;
+  semester: string;
+  category: string;
+  amount: string;
+  dueDate: string;
+  paidDate?: string;
+  status: 'paid' | 'pending' | 'overdue';
+  type: 'tuition' | 'hostel' | 'exam' | 'library';
+  transactionId?: string;
+}
+
+interface FeeSummary {
+  totalFees: number;
+  paidAmount: number;
+  remainingAmount: number;
+  feeStatus: 'Paid' | 'Partial' | 'Unpaid';
+}
 
 export default function StudentFeesPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
-  const [feeRecords, setFeeRecords] = useState(mockFeeRecords);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [selectedFee, setSelectedFee] = useState<FeeRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [feeSummary, setFeeSummary] = useState<FeeSummary | null>(null);
+  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedFeeRecord, setSelectedFeeRecord] = useState<FeeRecord | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -33,126 +61,130 @@ export default function StudentFeesPage() {
       return;
     }
     setUser(currentUser);
+    loadMockData();
   }, [router]);
 
-  if (!user) {
-    return <div>Loading...</div>;
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'pending':
-        return <Clock className="h-5 w-5 text-yellow-600" />;
-      case 'overdue':
-        return <AlertCircle className="h-5 w-5 text-red-600" />;
-      default:
-        return <Clock className="h-5 w-5 text-gray-600" />;
+  const loadMockData = async () => {
+    try {
+      setLoading(true);
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setFeeSummary(mockFeeSummary);
+      setFeeRecords(mockFeeRecords);
+    } catch (error) {
+      toast.error('Failed to load fee data');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'overdue':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const handlePayNow = (fee: FeeRecord) => {
-    setSelectedFee(fee);
-    setPaymentModalOpen(true);
   };
 
   const handlePaymentSuccess = (feeId: string, transactionId: string) => {
-    setFeeRecords(prevFees => 
-      prevFees.map(fee => 
-        fee.id === feeId 
-          ? { 
-              ...fee, 
-              status: 'paid' as const, 
-              paidDate: new Date().toISOString().split('T')[0],
-              transactionId 
-            }
-          : fee
-      )
-    );
-    setPaymentModalOpen(false);
-    setSelectedFee(null);
+    // Update the fee record to paid status
+    setFeeRecords(prev => prev.map(fee => 
+      fee.id === feeId 
+        ? { 
+            ...fee, 
+            status: 'paid' as const, 
+            paidDate: new Date().toISOString(),
+            transactionId 
+          }
+        : fee
+    ));
+
+    // Update fee summary
+    if (feeSummary && selectedFeeRecord) {
+      const paidAmount = parseFloat(selectedFeeRecord.amount);
+      const newPaidAmount = feeSummary.paidAmount + paidAmount;
+      const newRemainingAmount = feeSummary.totalFees - newPaidAmount;
+      
+      setFeeSummary({
+        ...feeSummary,
+        paidAmount: newPaidAmount,
+        remainingAmount: newRemainingAmount,
+        feeStatus: newRemainingAmount === 0 ? 'Paid' : 'Partial',
+      });
+    }
+
+    setShowPaymentModal(false);
+    setSelectedFeeRecord(null);
+    toast.success('Payment completed successfully!');
+  };
+
+  const openPaymentModal = (feeRecord: FeeRecord) => {
+    setSelectedFeeRecord(feeRecord);
+    setShowPaymentModal(true);
   };
 
   const handleDownloadReceipt = (fee: FeeRecord) => {
-    const receiptData = {
-      transactionId: fee.transactionId || `TXN${Date.now()}`,
-      feeType: fee.type,
-      amount: fee.amount,
-      paymentDate: fee.paidDate || new Date().toISOString(),
-      semester: fee.semester,
-      studentName: mockStudent.name,
-      studentId: mockStudent.id,
-      rollNumber: mockStudent.rollNumber,
-      department: mockStudent.department,
-      paymentMethod: "Card", // This could be stored in the fee record
-      dueDate: fee.dueDate,
-      academicYear: "2024-25"
-    };
-    
-    downloadReceipt(receiptData);
+    toast.success('Receipt downloaded! This is a demo feature.');
   };
 
-  const totalPaid = feeRecords.filter(fee => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const totalPending = feeRecords.filter(fee => fee.status === 'pending').reduce((sum, fee) => sum + fee.amount, 0);
+  if (loading || !user) {
+    return (
+      <DashboardLayout title="Fee Management" userRole="student">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+            <p className="mt-4 text-muted-foreground">Loading fee information...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const pendingFees = feeRecords.filter(fee => fee.status === 'pending');
   const paidFees = feeRecords.filter(fee => fee.status === 'paid');
-  const pendingFees = feeRecords.filter(fee => fee.status !== 'paid');
 
   return (
     <DashboardLayout title="Fee Management" userRole="student">
       <div className="space-y-6">
-        {/* Summary Cards */}
+        {/* Fee Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{feeSummary?.totalFees.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Academic Year 2024-25</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Amount Paid</CardTitle>
               <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">₹{totalPaid.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">This academic year</p>
+              <div className="text-2xl font-bold text-green-600">₹{feeSummary?.paidAmount.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Successfully processed</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Amount</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-600" />
+              <CardTitle className="text-sm font-medium">Remaining Amount</CardTitle>
+              <AlertCircle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">₹{totalPending.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Due soon</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {feeRecords.filter(fee => fee.status === 'paid').length}/{feeRecords.length}
-              </div>
-              <p className="text-xs text-muted-foreground">Payments completed</p>
+              <div className="text-2xl font-bold text-red-600">₹{feeSummary?.remainingAmount.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Due for payment</p>
+              {feeSummary && feeSummary.remainingAmount > 0 && pendingFees.length > 0 && (
+                <Button 
+                  className="mt-2 w-full" 
+                  size="sm"
+                  onClick={() => openPaymentModal(pendingFees[0])}
+                >
+                  Pay Now
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Student Info */}
+        {/* Student Information */}
         <Card>
           <CardHeader>
             <CardTitle>Student Information</CardTitle>
@@ -165,7 +197,7 @@ export default function StudentFeesPage() {
               </div>
               <div>
                 <p><strong>Department:</strong> {mockStudent.department}</p>
-                <p><strong>Current Semester:</strong> {mockStudent.semester}</p>
+                <p><strong>Current Semester:</strong> {mockStudent.currentSemester}</p>
               </div>
             </div>
           </CardContent>
@@ -176,55 +208,32 @@ export default function StudentFeesPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                Pending Fees
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                Pending Fees ({pendingFees.length})
               </CardTitle>
-              <CardDescription>Outstanding fee payments that require your attention</CardDescription>
+              <CardDescription>Fees that require payment</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {pendingFees.map((fee) => (
-                  <div key={fee.id} className="border border-orange-200 rounded-lg p-4 bg-orange-50/30 hover:bg-orange-50 transition-colors">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getStatusIcon(fee.status)}
-                        <div>
-                          <h3 className="font-semibold">
-                            {fee.type.charAt(0).toUpperCase() + fee.type.slice(1)} Fee
-                          </h3>
-                          <p className="text-sm text-gray-600">{fee.semester}</p>
-                        </div>
+                  <div key={fee.id} className="flex items-center justify-between p-4 border rounded-lg bg-red-50">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 bg-red-100 rounded-full">
+                        <Clock className="h-4 w-4 text-red-600" />
                       </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-orange-700">₹{fee.amount.toLocaleString()}</p>
-                        <Badge className={getStatusColor(fee.status)}>
-                          {fee.status.toUpperCase()}
-                        </Badge>
+                      <div>
+                        <h4 className="font-medium">
+                          {fee.category}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{fee.semester}</p>
+                        <p className="text-sm text-red-600">Due: {new Date(fee.dueDate).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                      <div>
-                        <p className="font-medium">Due Date</p>
-                        <p>{new Date(fee.dueDate).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium">Days {new Date(fee.dueDate) < new Date() ? 'Overdue' : 'Remaining'}</p>
-                        <p className={new Date(fee.dueDate) < new Date() ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                          {Math.abs(Math.ceil((new Date(fee.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} days
-                        </p>
-                      </div>
-                      <div>
-                        <p className="font-medium">Semester</p>
-                        <p>{fee.semester}</p>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button 
-                          size="sm" 
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => handlePayNow(fee)}
-                        >
-                          <CreditCard className="h-4 w-4 mr-2" />
+                    <div className="text-right">
+                      <p className="text-lg font-semibold">₹{parseFloat(fee.amount).toLocaleString()}</p>
+                      <Badge variant="destructive">Pending</Badge>
+                      <div className="mt-2 space-x-2">
+                        <Button size="sm" onClick={() => openPaymentModal(fee)}>
                           Pay Now
                         </Button>
                       </div>
@@ -237,112 +246,73 @@ export default function StudentFeesPage() {
         )}
 
         {/* Payment History */}
-        {paidFees.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5 text-green-600" />
-                Payment History
-              </CardTitle>
-              <CardDescription>Successfully completed fee payments with downloadable receipts</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {paidFees.map((fee) => (
-                  <div key={fee.id} className="border border-green-200 rounded-lg p-4 bg-green-50/30 hover:bg-green-50 transition-colors">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                        <div>
-                          <h3 className="font-semibold">
-                            {fee.type.charAt(0).toUpperCase() + fee.type.slice(1)} Fee
-                          </h3>
-                          <p className="text-sm text-gray-600">{fee.semester}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-bold text-green-700">₹{fee.amount.toLocaleString()}</p>
-                        <Badge className="bg-green-100 text-green-800">
-                          PAID
-                        </Badge>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                      <div>
-                        <p className="font-medium">Due Date</p>
-                        <p>{new Date(fee.dueDate).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium">Paid Date</p>
-                        <p className="text-green-600 font-medium">{fee.paidDate ? new Date(fee.paidDate).toLocaleDateString() : 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium">Transaction ID</p>
-                        <p className="text-xs text-gray-500 font-mono">{fee.transactionId || 'N/A'}</p>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDownloadReceipt(fee)}
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Receipt
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Payment Instructions */}
         <Card>
           <CardHeader>
-            <CardTitle>Payment Instructions</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Payment History
+            </CardTitle>
+            <CardDescription>Your completed fee payments</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-2">
-                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-primary">1</span>
+            <div className="space-y-4">
+              {paidFees.map((fee) => (
+                <div key={fee.id} className="flex items-center justify-between p-4 border rounded-lg bg-green-50">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-green-100 rounded-full">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium">
+                        {fee.category}
+                      </h4>
+                      <p className="text-sm text-muted-foreground">{fee.semester}</p>
+                      <p className="text-sm text-green-600">
+                        Paid: {fee.paidDate ? new Date(fee.paidDate).toLocaleDateString() : 'N/A'}
+                      </p>
+                      {fee.transactionId && (
+                        <p className="text-xs text-muted-foreground">TXN: {fee.transactionId}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-semibold">₹{parseFloat(fee.amount).toLocaleString()}</p>
+                    <Badge variant="default">Paid</Badge>
+                    <div className="mt-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleDownloadReceipt(fee)}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Receipt
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <p>Click &quot;Pay Now&quot; button next to any pending fee</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-primary">2</span>
-                </div>
-                <p>Choose your preferred payment method (Net Banking, UPI, Cards)</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-primary">3</span>
-                </div>
-                <p>Complete the payment and download your receipt</p>
-              </div>
-              <div className="bg-blue-50 p-3 rounded-lg mt-4">
-                <p className="text-blue-800 text-sm">
-                  <strong>Note:</strong> All payments are processed securely. Receipts will be automatically 
-                  generated and available for download immediately after successful payment.
-                </p>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
         {/* Payment Modal */}
-        {selectedFee && (
+        {selectedFeeRecord && (
           <PaymentModal
-            isOpen={paymentModalOpen}
+            isOpen={showPaymentModal}
             onClose={() => {
-              setPaymentModalOpen(false);
-              setSelectedFee(null);
+              setShowPaymentModal(false);
+              setSelectedFeeRecord(null);
             }}
-            feeRecord={selectedFee}
+            feeRecord={{
+              id: selectedFeeRecord.id,
+              type: selectedFeeRecord.type,
+              amount: parseFloat(selectedFeeRecord.amount),
+              dueDate: selectedFeeRecord.dueDate,
+              semester: selectedFeeRecord.semester,
+              status: selectedFeeRecord.status,
+              paidDate: selectedFeeRecord.paidDate,
+              transactionId: selectedFeeRecord.transactionId,
+            }}
             onPaymentSuccess={handlePaymentSuccess}
           />
         )}

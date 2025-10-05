@@ -45,27 +45,21 @@ const getTransactions = asyncHandler(async (req, res) => {
   }
 
   // Count total
-  const total = await Transaction.count({ where: whereClause });
+  const total = await Transaction.countDocuments(whereClause);
 
   // Get transactions with pagination
-  const transactions = await Transaction.findAll({
-    where: whereClause,
-    include: [
-      {
-        model: Student,
-        as: 'student',
-        attributes: ['id', 'enrollmentNumber'],
-        include: [{
-          model: User,
-          as: 'user',
-          attributes: ['name', 'email', 'phone']
-        }]
+  const transactions = await Transaction.find(whereClause)
+    .populate({
+      path: 'studentId',
+      select: 'id enrollmentNumber',
+      populate: {
+        path: 'userId',
+        select: 'name email phone'
       }
-    ],
-    order: [['createdAt', 'DESC']],
-    limit: parseInt(limit),
-    offset: (parseInt(page) - 1) * parseInt(limit)
-  });
+    })
+    .sort({ createdAt: -1 })
+    .limit(parseInt(limit))
+    .skip((parseInt(page) - 1) * parseInt(limit));
 
   // Transform data for frontend
   const transformedTransactions = transactions.map(t => ({
@@ -319,11 +313,9 @@ const getFinancialSummary = asyncHandler(async (req, res) => {
   const collegeId = req.user.collegeId;
 
   // Get all transactions for the college
-  const allTransactions = await Transaction.findAll({
-    where: {
-      collegeId,
-      type: 'income' // Only count income transactions for fees
-    }
+  const allTransactions = await Transaction.find({
+    collegeId,
+    type: 'income' // Only count income transactions for fees
   });
 
   // Calculate summary
@@ -376,13 +368,10 @@ const getStudentFees = asyncHandler(async (req, res) => {
   }
 
   // Get all transactions for this student
-  const transactions = await Transaction.findAll({
-    where: {
-      studentId,
-      type: 'income'
-    },
-    order: [['createdAt', 'DESC']]
-  });
+  const transactions = await Transaction.find({
+    studentId,
+    type: 'income'
+  }).sort({ createdAt: -1 });
 
   // Calculate summary
   const totalFees = transactions.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);

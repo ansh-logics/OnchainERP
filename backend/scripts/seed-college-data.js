@@ -40,14 +40,28 @@ async function seedData() {
   try {
     console.log('🌱 Starting database seeding...\n');
 
-    // Check if college already exists
+    // Check if college already exists - if so, delete existing data first
     const existingCollege = await College.findOne({ where: { shortName: 'TIES' } });
     if (existingCollege) {
-      console.log('⚠️  College "TIES" already exists in the database.');
-      console.log('⚠️  Please clear the database first or use a different college name.');
-      console.log('\nTo clear the database, run:');
-      console.log('  psql -U your_user -d your_database -c "TRUNCATE users, colleges, departments, faculty, students, courses, sections, classrooms, labs, exam_halls, library_books, exams, assignments, timetable, transactions CASCADE;"');
-      process.exit(0);
+      console.log('⚠️  College "TIES" already exists. Cleaning existing data...');
+      
+      // Delete in correct order to respect foreign keys
+      await sequelize.query('DELETE FROM assignment_submissions');
+      await sequelize.query('DELETE FROM assignments');
+      await sequelize.query('DELETE FROM attendance');
+      await sequelize.query('DELETE FROM exam_results');
+      await sequelize.query('DELETE FROM exams');
+      await sequelize.query('DELETE FROM library_issues');
+      await sequelize.query('DELETE FROM timetable');
+      await sequelize.query('DELETE FROM sections');
+      await sequelize.query('DELETE FROM courses');
+      await sequelize.query('DELETE FROM students');
+      await sequelize.query('DELETE FROM faculty');
+      await sequelize.query('DELETE FROM departments');
+      await sequelize.query('DELETE FROM users WHERE role != \'superadmin\'');
+      await sequelize.query('DELETE FROM colleges');
+      
+      console.log('✅ Existing data cleaned');
     }
 
     // Start transaction
@@ -135,9 +149,9 @@ async function seedData() {
           shortName: 'CSE',
           code: 'CSE',
           description: 'Department of Computer Science and Engineering offering B.Tech and M.Tech programs',
-          studentsPerSection: 60,
+          studentsPerSection: 24,
           totalSections: 4,
-          totalIntake: 240,
+          totalIntake: 96, // 24 students per batch * 4 batches = 96 total
           totalFaculty: 18,
           totalLabs: 6
         },
@@ -146,9 +160,9 @@ async function seedData() {
           shortName: 'ECE',
           code: 'ECE',
           description: 'Department of Electronics and Communication Engineering',
-          studentsPerSection: 60,
-          totalSections: 3,
-          totalIntake: 180,
+          studentsPerSection: 18,
+          totalSections: 4,
+          totalIntake: 72, // 18 students per batch * 4 batches = 72 total
           totalFaculty: 15,
           totalLabs: 5
         },
@@ -157,9 +171,9 @@ async function seedData() {
           shortName: 'MECH',
           code: 'MECH',
           description: 'Department of Mechanical Engineering',
-          studentsPerSection: 60,
-          totalSections: 3,
-          totalIntake: 180,
+          studentsPerSection: 18,
+          totalSections: 4,
+          totalIntake: 72, // 18 students per batch * 4 batches = 72 total
           totalFaculty: 14,
           totalLabs: 4
         },
@@ -168,9 +182,9 @@ async function seedData() {
           shortName: 'CIVIL',
           code: 'CIVIL',
           description: 'Department of Civil Engineering',
-          studentsPerSection: 60,
-          totalSections: 2,
-          totalIntake: 120,
+          studentsPerSection: 15,
+          totalSections: 4,
+          totalIntake: 60, // 15 students per batch * 4 batches = 60 total
           totalFaculty: 10,
           totalLabs: 3
         },
@@ -179,9 +193,9 @@ async function seedData() {
           shortName: 'EEE',
           code: 'EEE',
           description: 'Department of Electrical and Electronics Engineering',
-          studentsPerSection: 60,
-          totalSections: 2,
-          totalIntake: 120,
+          studentsPerSection: 15,
+          totalSections: 4,
+          totalIntake: 60, // 15 students per batch * 4 batches = 60 total
           totalFaculty: 12,
           totalLabs: 4
         }
@@ -298,23 +312,48 @@ async function seedData() {
       const batches = ['2021', '2022', '2023', '2024'];
 
       let totalStudentsCreated = 0;
+      let deptStudentCounts = {};
 
       for (const dept of departments) {
+        deptStudentCounts[dept.code] = 0;
         // Create students for different batches
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
           const batch = batches[batchIndex];
           const admissionYear = admissionYears[batchIndex];
           const currentSemester = (2024 - admissionYear) * 2 + 2; // Calculate semester based on year
           
-          // Students per batch based on intake
-          const studentsInBatch = Math.floor(dept.totalIntake * 0.9); // 90% filled
+          // Calculate students per batch to reach exactly 360 total students
+          // Total target: 360 students across 5 departments and 4 batches
+          // Distribution: CSE=96, ECE=72, MECH=72, CIVIL=60, EEE=60 (total=360)
+          let studentsInBatch;
+          switch(dept.code) {
+            case 'CSE': studentsInBatch = 24; break;  // 24 * 4 batches = 96
+            case 'ECE': studentsInBatch = 18; break;  // 18 * 4 batches = 72
+            case 'MECH': studentsInBatch = 18; break; // 18 * 4 batches = 72
+            case 'CIVIL': studentsInBatch = 15; break;// 15 * 4 batches = 60
+            case 'EEE': studentsInBatch = 15; break;  // 15 * 4 batches = 60
+            default: studentsInBatch = 15;
+          }
 
           for (let i = 0; i < studentsInBatch; i++) {
             const gender = genders[generateRandomNumber(0, 1)];
-            const firstName = gender === 'Male'
-              ? ['Rahul', 'Arjun', 'Karthik', 'Rohan', 'Aditya', 'Varun', 'Nikhil', 'Abhishek'][generateRandomNumber(0, 7)]
-              : ['Sneha', 'Pooja', 'Divya', 'Shruti', 'Nisha', 'Riya', 'Tanvi', 'Isha'][generateRandomNumber(0, 7)];
-            const lastName = ['Gupta', 'Verma', 'Joshi', 'Pillai', 'Menon', 'Shah', 'Desai', 'Kulkarni'][generateRandomNumber(0, 7)];
+            const maleNames = ['Rahul', 'Arjun', 'Karthik', 'Rohan', 'Aditya', 'Varun', 'Nikhil', 'Abhishek', 'Vikram', 'Sanjay', 
+                              'Ravi', 'Amit', 'Suresh', 'Ajay', 'Anand', 'Deepak', 'Manoj', 'Prashant', 'Sachin', 'Yogesh',
+                              'Ashish', 'Gaurav', 'Harsh', 'Ishan', 'Jatin', 'Kunal', 'Lalit', 'Mayank', 'Neeraj', 'Omkar',
+                              'Pankaj', 'Qasim', 'Ritesh', 'Sumit', 'Tarun', 'Ujjwal', 'Vikas', 'Wasim', 'Yash', 'Zaid'];
+            const femaleNames = ['Sneha', 'Pooja', 'Divya', 'Shruti', 'Nisha', 'Riya', 'Tanvi', 'Isha', 'Kavya', 'Lata',
+                                'Meera', 'Naina', 'Ojaswini', 'Priya', 'Queenie', 'Rashmi', 'Swati', 'Tanya', 'Uma', 'Vidya',
+                                'Wanda', 'Xara', 'Yamini', 'Zara', 'Ananya', 'Bhavana', 'Chandni', 'Deepika', 'Esha', 'Falguni',
+                                'Gauri', 'Harini', 'Indira', 'Jyoti', 'Kiran', 'Lavanya', 'Madhuri', 'Neha', 'Orvita', 'Pallavi'];
+            const lastNames = ['Gupta', 'Verma', 'Joshi', 'Pillai', 'Menon', 'Shah', 'Desai', 'Kulkarni', 'Agarwal', 'Bansal',
+                              'Chandra', 'Dutta', 'Eyer', 'Fernandes', 'Ghosh', 'Hegde', 'Iyer', 'Jain', 'Kapoor', 'Lal',
+                              'Mishra', 'Nair', 'Oak', 'Patel', 'Qureshi', 'Rao', 'Sharma', 'Trivedi', 'Upadhyay', 'Varma',
+                              'Wadhwa', 'Xavier', 'Yadav', 'Zaveri', 'Arora', 'Bajaj', 'Chopra', 'Das', 'Ehsan', 'Garg'];
+            
+            const firstName = gender === 'Male' 
+              ? maleNames[generateRandomNumber(0, maleNames.length - 1)]
+              : femaleNames[generateRandomNumber(0, femaleNames.length - 1)];
+            const lastName = lastNames[generateRandomNumber(0, lastNames.length - 1)];
 
             const rollNumber = `${dept.code}${batch}${String(i + 1).padStart(3, '0')}`;
             const enrollmentNumber = `TIES${batch}${dept.code}${String(i + 1).padStart(4, '0')}`;
@@ -371,11 +410,17 @@ async function seedData() {
 
             students.push(student);
             totalStudentsCreated++;
+            deptStudentCounts[dept.code]++;
           }
         }
       }
 
-      console.log(`✅ Created ${totalStudentsCreated} students\n`);
+      console.log(`✅ Created ${totalStudentsCreated} students total`);
+      console.log(`📊 Department-wise distribution:`);
+      for (const [deptCode, count] of Object.entries(deptStudentCounts)) {
+        console.log(`   ${deptCode}: ${count} students`);
+      }
+      console.log('');
 
       // ============================================
       // 5. CREATE COURSES

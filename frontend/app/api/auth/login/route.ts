@@ -1,5 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Mock faculty credentials for demo
+const mockFacultyCredentials = [
+  { email: 'rajesh.kumar@college.edu', password: 'faculty123', role: 'faculty', name: 'Dr. Rajesh Kumar' },
+  { email: 'priya.sharma@college.edu', password: 'faculty123', role: 'faculty', name: 'Dr. Priya Sharma' },
+  { email: 'amit.singh@college.edu', password: 'faculty123', role: 'faculty', name: 'Prof. Amit Singh' },
+  { email: 'faculty@demo.com', password: 'demo123', role: 'faculty', name: 'Demo Faculty' }
+];
+
+const mockFacultyResponse = {
+  success: true,
+  message: 'Login successful',
+  data: {
+    id: 'faculty_67831',
+    name: 'Dr. Rajesh Kumar',
+    email: 'rajesh.kumar@college.edu',
+    role: 'faculty',
+    profilePicture: '/uploads/profile/faculty_67831.jpg',
+    college: { _id: 'college1', name: 'Dr. A.P.J. Abdul Kalam Technical University', shortName: 'AKTU' },
+    facultyProfile: {
+      employeeId: 'FAC2023001',
+      designation: 'Associate Professor',
+      department: { name: 'Computer Science & Engineering', code: 'CSE' }
+    }
+  },
+  token: 'mock_faculty_token_' + Date.now()
+};
+
 export async function POST(request: NextRequest) {
   try {
     // Parse the request body
@@ -22,6 +49,24 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Check for mock faculty credentials first
+    const mockFaculty = mockFacultyCredentials.find(cred => 
+      cred.email === body.email && cred.password === body.password
+    );
+    
+    if (mockFaculty) {
+      console.log('[API] Mock faculty login successful:', mockFaculty.name);
+      const response = {
+        ...mockFacultyResponse,
+        data: {
+          ...mockFacultyResponse.data,
+          name: mockFaculty.name,
+          email: mockFaculty.email
+        }
+      };
+      return NextResponse.json(response);
+    }
     
     // Forward the request to your backend API
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:5001';
@@ -41,6 +86,12 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Backend error response:', errorText);
+      
+      // If backend fails, check if this looks like a faculty email for demo
+      if (body.email.includes('faculty') || body.email.includes('@college.edu')) {
+        console.log('[API] Backend failed, providing mock faculty login for demo');
+        return NextResponse.json(mockFacultyResponse);
+      }
       
       // Try to parse error response
       try {

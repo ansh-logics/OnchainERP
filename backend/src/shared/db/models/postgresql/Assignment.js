@@ -7,11 +7,11 @@ const Assignment = sequelize.define('Assignment', {
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true
   },
-  courseId: {
+  sectionId: {
     type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: 'courses',
+      model: 'sections',
       key: 'id'
     }
   },
@@ -37,6 +37,10 @@ const Assignment = sequelize.define('Assignment', {
   assignmentType: {
     type: DataTypes.ENUM('individual', 'group', 'lab', 'project', 'quiz', 'presentation'),
     allowNull: false
+  },
+  submissionFormat: {
+    type: DataTypes.STRING,
+    defaultValue: 'pdf'
   },
   maxMarks: {
     type: DataTypes.INTEGER,
@@ -92,7 +96,7 @@ const Assignment = sequelize.define('Assignment', {
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   indexes: [
-    { fields: ['courseId'] },
+    { fields: ['sectionId'] },
     { fields: ['facultyId'] },
     { fields: ['assignmentType'] },
     { fields: ['dueDate'] },

@@ -3,315 +3,260 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCurrentUser } from "@/lib/auth";
-import { getTransactions, type Transaction } from "@/lib/api";
+import { api } from "@/lib/api";
 import { 
+  CreditCard, 
   Search,
-  DollarSign,
-  CreditCard,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Filter,
   Download,
-  RefreshCcw,
-  IndianRupee
+  Filter,
+  CheckCircle,
+  Clock,
+  XCircle
 } from "lucide-react";
 
-export default function StaffFeesPage() {
+interface StudentFee {
+  studentId: string;
+  enrollmentNumber: string;
+  rollNumber: string;
+  name: string;
+  email: string;
+  department: string;
+  section: string;
+  currentSemester: number;
+  feeSummary: {
+    totalFees: number;
+    paidAmount: number;
+    remainingAmount: number;
+    feeStatus: 'Paid' | 'Partial' | 'Unpaid';
+  };
+}
+
+export default function FacultyFeesPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedTab, setSelectedTab] = useState("pending");
+  const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
+  const [filteredFees, setFilteredFees] = useState<StudentFee[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
 
   useEffect(() => {
     const currentUser = getCurrentUser();
-    if (!currentUser || (currentUser.role !== 'staff' && currentUser.role !== 'faculty')) {
+    if (!currentUser) {
       router.push('/login');
       return;
     }
+    if (currentUser.role !== 'staff' && currentUser.role !== 'faculty') {
+      router.push(`/${currentUser.role}/dashboard`);
+      return;
+    }
     setUser(currentUser);
-    loadTransactions();
+    fetchStudentFees();
   }, [router]);
 
-  const loadTransactions = async () => {
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = studentFees.filter(student => 
+        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.enrollmentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.rollNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredFees(filtered);
+    } else {
+      setFilteredFees(studentFees);
+    }
+  }, [searchTerm, studentFees]);
+
+  const fetchStudentFees = async () => {
     try {
       setLoading(true);
-      setError(null);
+      const response = await api.get('/api/faculty/fees');
       
-      const response = await getTransactions({ limit: 100 });
-      
-      if (response.success && response.data) {
-        setTransactions(response.data.data || []);
-      } else {
-        setError(response.message || 'Failed to load transactions');
+      if (response.data.success) {
+        setStudentFees(response.data.data);
+        setFilteredFees(response.data.data);
       }
-    } catch (err) {
-      console.error('Error loading transactions:', err);
-      setError('An error occurred while loading transactions');
+    } catch (error: any) {
+      console.error('Error fetching student fees:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) {
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Paid':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-200">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Paid
+        </Badge>;
+      case 'Partial':
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
+          <Clock className="h-3 w-3 mr-1" />
+          Partial
+        </Badge>;
+      case 'Unpaid':
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-200">
+          <XCircle className="h-3 w-3 mr-1" />
+          Unpaid
+        </Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  if (loading || !user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p>Loading...</p>
+      <DashboardLayout title="Student Fee Status" userRole={(user?.role === 'faculty' ? 'faculty' : 'staff') as 'faculty'}>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading student fee data...</p>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
-  const filteredTransactions = transactions.filter(transaction => {
-    const matchesSearch = transaction.student?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.student?.enrollmentNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (selectedTab === 'all') return matchesSearch;
-    return matchesSearch && transaction.status === selectedTab;
-  });
-
-  const stats = {
-    totalCollected: transactions.filter(t => t.status === 'paid').reduce((sum, t) => sum + t.amount, 0),
-    totalPending: transactions.filter(t => t.status === 'pending').reduce((sum, t) => sum + t.amount, 0),
-    pending: transactions.filter(t => t.status === 'pending').length,
-    paid: transactions.filter(t => t.status === 'paid').length,
-    overdue: transactions.filter(t => t.status === 'overdue').length,
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const totalStudents = filteredFees.length;
+  const paidCount = filteredFees.filter(s => s.feeSummary.feeStatus === 'Paid').length;
+  const partialCount = filteredFees.filter(s => s.feeSummary.feeStatus === 'Partial').length;
+  const unpaidCount = filteredFees.filter(s => s.feeSummary.feeStatus === 'Unpaid').length;
 
   return (
-    <DashboardLayout title="Fee Collection" userRole={(user.role === 'faculty' ? 'faculty' : 'staff') as 'faculty'}>
+    <DashboardLayout title="Student Fee Status" userRole={(user.role === 'faculty' ? 'faculty' : 'staff') as 'faculty'}>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">Fee Collection Management</h2>
-            <p className="text-gray-600">Track and manage student fee payments</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={loadTransactions}>
-              <RefreshCcw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-            <Button>
-              <CreditCard className="h-4 w-4 mr-2" />
-              Record Payment
-            </Button>
-          </div>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-red-800">
-                <AlertCircle className="h-5 w-5" />
-                <p>{error}</p>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={loadTransactions}
-                className="mt-4"
-              >
-                Retry
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-600">Total Collected</CardTitle>
-                <DollarSign className="h-4 w-4 text-green-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalCollected)}</div>
-              <p className="text-xs text-gray-600 mt-1">{stats.paid} transactions</p>
+              <div className="text-2xl font-bold">{totalStudents}</div>
+              <p className="text-xs text-muted-foreground">In your courses</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-600">Total Pending</CardTitle>
-                <Clock className="h-4 w-4 text-orange-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Paid</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{formatCurrency(stats.totalPending)}</div>
-              <p className="text-xs text-gray-600 mt-1">{stats.pending} pending</p>
+              <div className="text-2xl font-bold text-green-600">{paidCount}</div>
+              <p className="text-xs text-muted-foreground">{totalStudents > 0 ? Math.round((paidCount / totalStudents) * 100) : 0}% of total</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-600">Paid</CardTitle>
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Partial</CardTitle>
+              <Clock className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.paid}</div>
-              <p className="text-xs text-gray-600 mt-1">Completed payments</p>
+              <div className="text-2xl font-bold text-yellow-600">{partialCount}</div>
+              <p className="text-xs text-muted-foreground">{totalStudents > 0 ? Math.round((partialCount / totalStudents) * 100) : 0}% of total</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-gray-600">Overdue</CardTitle>
-                <AlertCircle className="h-4 w-4 text-red-600" />
-              </div>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Unpaid</CardTitle>
+              <XCircle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
-              <p className="text-xs text-gray-600 mt-1">Requires attention</p>
+              <div className="text-2xl font-bold text-red-600">{unpaidCount}</div>
+              <p className="text-xs text-muted-foreground">{totalStudents > 0 ? Math.round((unpaidCount / totalStudents) * 100) : 0}% of total</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Search and Filters */}
+        {/* Student Fee Table */}
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Student Fee Status</CardTitle>
+                <CardDescription>View fee status of students in your courses (Read-only)</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filter
+                </Button>
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Search */}
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by student name, enrollment number, or description..."
+                  placeholder="Search by name, enrollment number, or roll number..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Button variant="outline">
-                <Filter className="h-4 w-4 mr-2" />
-                Filters
-              </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
+            </div>
+
+            {/* Table */}
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student</TableHead>
+                    <TableHead>Enrollment No</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Semester</TableHead>
+                    <TableHead className="text-right">Total Fees</TableHead>
+                    <TableHead className="text-right">Paid Amount</TableHead>
+                    <TableHead className="text-right">Remaining</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredFees.length > 0 ? (
+                    filteredFees.map((student) => (
+                      <TableRow key={student.studentId}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{student.name}</div>
+                            <div className="text-sm text-muted-foreground">{student.email}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{student.enrollmentNumber}</TableCell>
+                        <TableCell>{student.department}</TableCell>
+                        <TableCell>{student.currentSemester}</TableCell>
+                        <TableCell className="text-right">₹{student.feeSummary.totalFees.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-green-600">₹{student.feeSummary.paidAmount.toLocaleString()}</TableCell>
+                        <TableCell className="text-right text-red-600">₹{student.feeSummary.remainingAmount.toLocaleString()}</TableCell>
+                        <TableCell>{getStatusBadge(student.feeSummary.feeStatus)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        {searchTerm ? 'No students found matching your search' : 'No student fee data available'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
-        </Card>
-
-        {/* Transactions Table */}
-        <Card>
-          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <CardHeader>
-              <TabsList>
-                <TabsTrigger value="pending">Pending ({stats.pending})</TabsTrigger>
-                <TabsTrigger value="paid">Paid ({stats.paid})</TabsTrigger>
-                <TabsTrigger value="overdue">Overdue ({stats.overdue})</TabsTrigger>
-                <TabsTrigger value="all">All</TabsTrigger>
-              </TabsList>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="py-12 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading transactions...</p>
-                </div>
-              ) : filteredTransactions.length === 0 ? (
-                <div className="py-12 text-center">
-                  <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No transactions found</p>
-                  {searchTerm && (
-                    <Button 
-                      variant="link" 
-                      onClick={() => setSearchTerm('')}
-                      className="mt-2"
-                    >
-                      Clear search
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredTransactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center text-white">
-                            <IndianRupee className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.student?.name || 'Direct Payment'}</h3>
-                            <div className="flex items-center gap-4 text-sm text-gray-600">
-                              <span>{transaction.description || transaction.category}</span>
-                              {transaction.student && (
-                                <>
-                                  <span>•</span>
-                                  <span>{transaction.student.enrollmentNumber}</span>
-                                </>
-                              )}
-                              {transaction.dueDate && (
-                                <>
-                                  <span>•</span>
-                                  <span>Due: {formatDate(transaction.dueDate)}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="font-semibold text-lg">{formatCurrency(transaction.amount)}</div>
-                          {transaction.paidDate && (
-                            <p className="text-xs text-gray-600">Paid on {formatDate(transaction.paidDate)}</p>
-                          )}
-                        </div>
-                        <Badge variant={
-                          transaction.status === 'paid' ? 'default' :
-                          transaction.status === 'pending' ? 'secondary' :
-                          transaction.status === 'overdue' ? 'destructive' : 'outline'
-                        }>
-                          {transaction.status}
-                        </Badge>
-                        <Button variant="ghost" size="sm">
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Tabs>
         </Card>
       </div>
     </DashboardLayout>

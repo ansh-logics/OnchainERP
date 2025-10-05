@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser, UserRole } from "@/lib/auth";
+import { mockNotifications, Notification, ApiResponse } from "@/lib/mock-data";
+import { toast } from "sonner";
 import { 
   Bell,
   Calendar,
@@ -20,24 +22,17 @@ import {
   Settings,
   Filter,
   Star,
-  MessageCircle
+  MessageCircle,
+  Loader2,
+  RefreshCw
 } from "lucide-react";
 
-interface Notification {
-  id: number;
-  title: string;
-  message: string;
-  type: 'academic' | 'admin' | 'exam' | 'fee' | 'event' | 'alert';
-  priority: 'high' | 'medium' | 'low';
-  timestamp: string;
-  read: boolean;
-  category: string;
-  actionRequired?: boolean;
-}
+// Notification type is imported from @/types/student
 
 export default function NotificationsPage() {
   const [user, setUser] = useState<{name: string; role: string} | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -47,86 +42,51 @@ export default function NotificationsPage() {
       return;
     }
     setUser(currentUser);
-    
-    // Mock notifications based on user role
-    const mockNotifications: Notification[] = [
-      {
-        id: 1,
-        title: "Mid-term Exam Schedule Released",
-        message: "The mid-term examination schedule for Semester 5 has been published. Please check your exam dates and venues.",
-        type: 'exam',
-        priority: 'high',
-        timestamp: '2024-10-10T10:30:00Z',
-        read: false,
-        category: 'Examinations',
-        actionRequired: true
-      },
-      {
-        id: 2,
-        title: "Fee Payment Reminder",
-        message: "Your semester fee payment is due on October 15th, 2024. Please complete the payment to avoid late fees.",
-        type: 'fee',
-        priority: 'high',
-        timestamp: '2024-10-09T14:20:00Z',
-        read: false,
-        category: 'Finance',
-        actionRequired: true
-      },
-      {
-        id: 3,
-        title: "Library Book Return Reminder",
-        message: "You have 2 books due for return by October 12th, 2024. Please return them to avoid penalty charges.",
-        type: 'admin',
-        priority: 'medium',
-        timestamp: '2024-10-08T09:15:00Z',
-        read: true,
-        category: 'Library'
-      },
-      {
-        id: 4,
-        title: "New Course Registration Open",
-        message: "Registration for elective courses for next semester is now open. Deadline: October 20th, 2024.",
-        type: 'academic',
-        priority: 'medium',
-        timestamp: '2024-10-07T16:45:00Z',
-        read: false,
-        category: 'Academics',
-        actionRequired: true
-      },
-      {
-        id: 5,
-        title: "Cultural Fest 2024 - TechFusion",
-        message: "Annual cultural fest TechFusion 2024 is scheduled for October 25-27. Register your participation now!",
-        type: 'event',
-        priority: 'low',
-        timestamp: '2024-10-06T11:30:00Z',
-        read: true,
-        category: 'Events'
-      },
-      {
-        id: 6,
-        title: "Hostel Maintenance Notice",
-        message: "Planned maintenance work in Block A hostel on October 14th from 9 AM to 5 PM. Water supply may be affected.",
-        type: 'alert',
-        priority: 'medium',
-        timestamp: '2024-10-05T08:00:00Z',
-        read: true,
-        category: 'Hostel'
-      },
-      {
-        id: 7,
-        title: "Assignment Submission Extended",
-        message: "The deadline for CS301 Data Structures assignment has been extended to October 16th, 2024.",
-        type: 'academic',
-        priority: 'medium',
-        timestamp: '2024-10-04T15:20:00Z',
-        read: true,
-        category: 'Academics'
-      }
-    ];
-    
-    setNotifications(mockNotifications);
+    loadMockNotifications();
   }, [router]);
+
+  const loadMockNotifications = async () => {
+    try {
+      setLoading(true);
+      
+      // Simulate API loading delay
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      setNotifications(mockNotifications);
+    } catch (error: any) {
+      console.error('Error loading notifications:', error);
+      toast.error('Failed to load notifications');
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, isRead: true, read: true } : notif
+        )
+      );
+      toast.success('Notification marked as read');
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      toast.error('Failed to mark notification as read');
+    }
+  };
+
+  const markAllAsRead = () => {
+    setNotifications(prev => 
+      prev.map(notif => ({ ...notif, isRead: true, read: true }))
+    );
+    toast.success('All notifications marked as read');
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(notif => notif.id !== id));
+    toast.success('Notification deleted');
+  };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -148,8 +108,8 @@ export default function NotificationsPage() {
     }
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
+  const formatTimestamp = (createdAt: string) => {
+    const date = new Date(createdAt);
     const now = new Date();
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
     
@@ -164,29 +124,20 @@ export default function NotificationsPage() {
     }
   };
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
-    );
-  };
-
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-  };
-
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.isRead).length;
   const priorityCount = notifications.filter(n => n.actionRequired).length;
 
-  if (!user) {
-    return <div>Loading...</div>;
+  if (!user || loading) {
+    return (
+      <DashboardLayout title="Notifications" userRole={user?.role as UserRole || 'student'}>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto" />
+            <p className="mt-4 text-muted-foreground">Loading notifications...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
@@ -270,7 +221,7 @@ export default function NotificationsPage() {
             {notifications.length > 0 ? (
               <div className="space-y-3">
                 {notifications.map((notification) => (
-                  <Card key={notification.id} className={`transition-all hover:shadow-md ${!notification.read ? 'border-l-4 border-l-blue-500 bg-blue-50/30' : ''}`}>
+                  <Card key={notification.id} className={`transition-all hover:shadow-md ${!notification.isRead ? 'border-l-4 border-l-blue-500 bg-blue-50/30' : ''}`}>
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
@@ -279,10 +230,10 @@ export default function NotificationsPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className={`font-medium ${!notification.read ? 'text-gray-900' : 'text-gray-700'}`}>
+                              <h4 className={`font-medium ${!notification.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
                                 {notification.title}
                               </h4>
-                              {!notification.read && (
+                              {!notification.isRead && (
                                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                               )}
                               {notification.actionRequired && (
@@ -292,13 +243,13 @@ export default function NotificationsPage() {
                                 {notification.priority}
                               </Badge>
                             </div>
-                            <p className={`text-sm mb-2 ${!notification.read ? 'text-gray-800' : 'text-gray-600'}`}>
+                            <p className={`text-sm mb-2 ${!notification.isRead ? 'text-gray-800' : 'text-gray-600'}`}>
                               {notification.message}
                             </p>
                             <div className="flex items-center gap-4 text-xs text-gray-500">
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
-                                {formatTimestamp(notification.timestamp)}
+                                {formatTimestamp(notification.createdAt)}
                               </span>
                               <span className="px-2 py-1 bg-gray-100 rounded-full">
                                 {notification.category}
@@ -307,7 +258,7 @@ export default function NotificationsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 ml-4">
-                          {!notification.read && (
+                          {!notification.isRead && (
                             <Button
                               onClick={() => markAsRead(notification.id)}
                               variant="ghost"
@@ -344,9 +295,9 @@ export default function NotificationsPage() {
 
           {/* Unread Notifications */}
           <TabsContent value="unread" className="space-y-4">
-            {notifications.filter(n => !n.read).length > 0 ? (
+            {notifications.filter(n => !n.isRead).length > 0 ? (
               <div className="space-y-3">
-                {notifications.filter(n => !n.read).map((notification) => (
+                {notifications.filter(n => !n.isRead).map((notification) => (
                   <Card key={notification.id} className="border-l-4 border-l-blue-500 bg-blue-50/30">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
@@ -363,7 +314,7 @@ export default function NotificationsPage() {
                               )}
                             </div>
                             <p className="text-sm text-gray-800 mb-2">{notification.message}</p>
-                            <span className="text-xs text-gray-500">{formatTimestamp(notification.timestamp)}</span>
+                            <span className="text-xs text-gray-500">{formatTimestamp(notification.createdAt)}</span>
                           </div>
                         </div>
                         <Button
@@ -409,7 +360,7 @@ export default function NotificationsPage() {
                               <Badge variant="destructive" className="text-xs">Action Required</Badge>
                             </div>
                             <p className="text-sm text-gray-800 mb-2">{notification.message}</p>
-                            <span className="text-xs text-gray-500">{formatTimestamp(notification.timestamp)}</span>
+                            <span className="text-xs text-gray-500">{formatTimestamp(notification.createdAt)}</span>
                           </div>
                         </div>
                       </div>

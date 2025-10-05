@@ -14,10 +14,18 @@ interface ReceiptData {
   studentName: string;
   studentId: string;
   rollNumber: string;
+  enrollmentNumber?: string;
   department: string;
   paymentMethod: string;
   dueDate: string;
   academicYear: string;
+  receiptNumber?: string;
+  collegeName?: string;
+  collegeAddress?: string;
+  collegePhone?: string;
+  collegeEmail?: string;
+  description?: string;
+  bankReferenceNumber?: string;
 }
 
 interface ReceiptProps {
@@ -29,8 +37,16 @@ export function Receipt({ data }: ReceiptProps) {
     <div className="bg-white p-8 max-w-2xl mx-auto" id="payment-receipt">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">OnchainERP College</h1>
-        <p className="text-gray-600">Fee Payment Receipt</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {data.collegeName || 'OnchainERP College'}
+        </h1>
+        <p className="text-gray-600">{data.collegeAddress || 'College Address'}</p>
+        <p className="text-gray-600">
+          Phone: {data.collegePhone || '+91-XXXXXXXXXX'} | Email: {data.collegeEmail || 'info@college.edu'}
+        </p>
+        <div className="mt-4 pt-4 border-t">
+          <h2 className="text-lg font-semibold text-gray-800">Fee Payment Receipt</h2>
+        </div>
       </div>
 
       {/* Receipt Info */}
@@ -38,10 +54,13 @@ export function Receipt({ data }: ReceiptProps) {
         <div>
           <h3 className="font-semibold text-gray-900 mb-2">Receipt Details</h3>
           <div className="space-y-1 text-sm">
-            <p><span className="font-medium">Receipt No:</span> RCP{data.transactionId}</p>
+            <p><span className="font-medium">Receipt No:</span> {data.receiptNumber || `RCP${data.transactionId}`}</p>
             <p><span className="font-medium">Transaction ID:</span> {data.transactionId}</p>
-            <p><span className="font-medium">Payment Date:</span> {format(new Date(data.paymentDate), 'dd/MM/yyyy')}</p>
+            <p><span className="font-medium">Payment Date:</span> {format(new Date(data.paymentDate), 'dd/MM/yyyy hh:mm a')}</p>
             <p><span className="font-medium">Payment Method:</span> {data.paymentMethod}</p>
+            {data.bankReferenceNumber && (
+              <p><span className="font-medium">Bank Ref:</span> {data.bankReferenceNumber}</p>
+            )}
           </div>
         </div>
         <div>
@@ -50,6 +69,9 @@ export function Receipt({ data }: ReceiptProps) {
             <p><span className="font-medium">Name:</span> {data.studentName}</p>
             <p><span className="font-medium">Student ID:</span> {data.studentId}</p>
             <p><span className="font-medium">Roll Number:</span> {data.rollNumber}</p>
+            {data.enrollmentNumber && (
+              <p><span className="font-medium">Enrollment No:</span> {data.enrollmentNumber}</p>
+            )}
             <p><span className="font-medium">Department:</span> {data.department}</p>
           </div>
         </div>

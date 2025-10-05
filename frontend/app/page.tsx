@@ -37,7 +37,7 @@ export default function HomePage() {
           redirectPath = '/student/dashboard';
           break;
         case 'faculty':
-          redirectPath = '/staff/dashboard';
+          redirectPath = '/faculty';
           break;
         case 'cashier':
           redirectPath = '/cashier/dashboard';

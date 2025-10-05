@@ -29,6 +29,14 @@ import {
   Download
 } from "lucide-react";
 import { downloadReceipt } from "./receipt";
+import { 
+  initiateMockRazorpayPayment, 
+  mockVerifyPayment, 
+  PaymentData, 
+  RazorpayResponse 
+} from "@/lib/razorpay";
+import { mockStudent } from "@/lib/mock-data";
+import { toast } from "sonner";
 
 interface FeeRecord {
   id: string;
@@ -85,38 +93,71 @@ export function PaymentModal({ isOpen, onClose, feeRecord, onPaymentSuccess }: P
     setIsProcessing(true);
     setPaymentStep('processing');
     
-    // Generate transaction ID
-    const txnId = `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    setTransactionId(txnId);
-    
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    setPaymentStep('success');
-    setIsProcessing(false);
-    
-    // Simulate successful payment
-    setTimeout(() => {
-      onPaymentSuccess(feeRecord.id, txnId);
-    }, 2000);
+    // Prepare payment data
+    const paymentData: PaymentData = {
+      amount: feeRecord.amount,
+      currency: 'INR',
+      description: `${feeRecord.type} - ${feeRecord.semester}`,
+      studentName: mockStudent.name,
+      studentEmail: mockStudent.email,
+      studentPhone: mockStudent.phoneNumber,
+      feeType: feeRecord.type,
+    };
+
+    try {
+      await initiateMockRazorpayPayment(
+        paymentData,
+        async (response: RazorpayResponse) => {
+          try {
+            // Verify payment
+            const verificationResult = await mockVerifyPayment(response);
+            
+            if (verificationResult.success) {
+              setTransactionId(verificationResult.paymentId);
+              setPaymentStep('success');
+              setIsProcessing(false);
+              toast.success('Payment completed successfully!');
+              
+              // Simulate successful payment
+              setTimeout(() => {
+                onPaymentSuccess(feeRecord.id, verificationResult.paymentId);
+              }, 2000);
+              
+            } else {
+              throw new Error('Payment verification failed');
+            }
+          } catch (verifyError) {
+            console.error('Payment verification error:', verifyError);
+            setIsProcessing(false);
+            setPaymentStep('method');
+            toast.error('Payment verification failed');
+          }
+        },
+        (error: any) => {
+          console.error('Payment failed:', error);
+          setIsProcessing(false);
+          setPaymentStep('method');
+          toast.error('Payment failed. Please try again.');
+        },
+        () => {
+          // Payment dismissed
+          setIsProcessing(false);
+          setPaymentStep('method');
+          toast.info('Payment cancelled');
+        }
+      );
+    } catch (error) {
+      console.error('Payment initiation error:', error);
+      setIsProcessing(false);
+      setPaymentStep('method');
+      toast.error('Failed to initiate payment');
+    }
   };
 
   const isFormValid = () => {
-    if (!formData.agreeTerms) return false;
-    
-    switch (selectedMethod) {
-      case 'card':
-        return formData.cardNumber && formData.cardName && formData.expiryMonth && 
-               formData.expiryYear && formData.cvv;
-      case 'upi':
-        return formData.upiId;
-      case 'netbanking':
-        return formData.bank;
-      case 'wallet':
-        return formData.walletProvider;
-      default:
-        return false;
-    }
+    // For Razorpay integration, we only need terms agreement
+    // The actual payment details will be handled by Razorpay's secure checkout
+    return formData.agreeTerms;
   };
 
   const formatCardNumber = (value: string) => {
@@ -392,36 +433,41 @@ export function PaymentModal({ isOpen, onClose, feeRecord, onPaymentSuccess }: P
               </CardContent>
             </Card>
 
-            {/* Payment Methods */}
-            <Tabs value={selectedMethod} onValueChange={(value: string) => setSelectedMethod(value)}>
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="card" className="text-xs">
-                  <CreditCard className="h-4 w-4" />
-                </TabsTrigger>
-                <TabsTrigger value="upi" className="text-xs">
-                  <Smartphone className="h-4 w-4" />
-                </TabsTrigger>
-                <TabsTrigger value="netbanking" className="text-xs">
-                  <Building2 className="h-4 w-4" />
-                </TabsTrigger>
-                <TabsTrigger value="wallet" className="text-xs">
-                  <Wallet className="h-4 w-4" />
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="card" className="mt-4">
-                {renderPaymentMethod()}
-              </TabsContent>
-              <TabsContent value="upi" className="mt-4">
-                {renderPaymentMethod()}
-              </TabsContent>
-              <TabsContent value="netbanking" className="mt-4">
-                {renderPaymentMethod()}
-              </TabsContent>
-              <TabsContent value="wallet" className="mt-4">
-                {renderPaymentMethod()}
-              </TabsContent>
-            </Tabs>
+            {/* Razorpay Payment Info */}
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-blue-600 text-white p-2 rounded">
+                    <CreditCard className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-blue-900">Secure Payment by Razorpay</h4>
+                    <p className="text-sm text-blue-700">
+                      Pay securely using Cards, UPI, Net Banking, or Wallets
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-4 gap-3 mt-4">
+                  <div className="flex flex-col items-center gap-1">
+                    <CreditCard className="h-6 w-6 text-blue-600" />
+                    <span className="text-xs text-blue-700">Cards</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Smartphone className="h-6 w-6 text-blue-600" />
+                    <span className="text-xs text-blue-700">UPI</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Building2 className="h-6 w-6 text-blue-600" />
+                    <span className="text-xs text-blue-700">Net Banking</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <Wallet className="h-6 w-6 text-blue-600" />
+                    <span className="text-xs text-blue-700">Wallets</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Terms and Conditions */}
             <div className="flex items-center space-x-2 mt-4">
@@ -440,7 +486,7 @@ export function PaymentModal({ isOpen, onClose, feeRecord, onPaymentSuccess }: P
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-green-600" />
                 <span className="text-sm text-gray-700">
-                  Your payment is secured with 256-bit SSL encryption
+                  Secured by Razorpay with 256-bit SSL encryption
                 </span>
               </div>
             </div>
@@ -463,7 +509,7 @@ export function PaymentModal({ isOpen, onClose, feeRecord, onPaymentSuccess }: P
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    Pay ₹{feeRecord.amount.toLocaleString()}
+                    Pay ₹{feeRecord.amount.toLocaleString()} with Razorpay
                   </>
                 )}
               </Button>

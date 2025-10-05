@@ -163,7 +163,17 @@ export async function fetchCollegeSetupStatus(): Promise<ApiResponse<CollegeSetu
 export async function fetchCollegeProfile(collegeId?: string): Promise<ApiResponse<CollegeProfile>> {
   try {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const id = collegeId || user.collegeId || user.college?.id;
+    
+    // Handle cases where collegeId might be an object with id property
+    let id = collegeId;
+    if (!id) {
+      if (user.collegeId) {
+        // If collegeId is an object, extract the id property
+        id = typeof user.collegeId === 'object' ? user.collegeId.id : user.collegeId;
+      } else if (user.college?.id) {
+        id = user.college.id;
+      }
+    }
     
     if (!id) {
       return {
@@ -194,7 +204,17 @@ export async function updateCollegeProfile(
 ): Promise<ApiResponse<CollegeProfile>> {
   try {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const id = collegeId || user.collegeId || user.college?.id;
+    
+    // Handle cases where collegeId might be an object with id property
+    let id = collegeId;
+    if (!id) {
+      if (user.collegeId) {
+        // If collegeId is an object, extract the id property
+        id = typeof user.collegeId === 'object' ? user.collegeId.id : user.collegeId;
+      } else if (user.college?.id) {
+        id = user.college.id;
+      }
+    }
     
     if (!id) {
       return {

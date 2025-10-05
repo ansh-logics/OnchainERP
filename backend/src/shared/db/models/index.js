@@ -9,6 +9,7 @@ const Course = require('./postgresql/Course');
 const Section = require('./postgresql/Section');
 const Department = require('./postgresql/Department');
 const Transaction = require('./postgresql/Transaction');
+const Fee = require('./postgresql/Fee');
 const Lab = require('./postgresql/Lab');
 
 // Additional models
@@ -25,14 +26,47 @@ const LibraryBook = require('./postgresql/LibraryBook');
 const LibraryIssue = require('./postgresql/LibraryIssue');
 const Classroom = require('./postgresql/Classroom');
 const Timetable = require('./postgresql/Timetable');
+const CourseEnrollment = require('./postgresql/CourseEnrollment');
+const FacultySubstitution = require('./postgresql/FacultySubstitution');
 
 // Permission and User Management models
 const Permission = require('./postgresql/Permission');
 const RolePermission = require('./postgresql/RolePermission');
 const PasswordResetRequest = require('./postgresql/PasswordResetRequest');
 
-// MongoDB models (still centralized for now)
+// MongoDB models (primary database for migration)
 const mongoModels = require('./mongodb');
+
+// Intelligent model routing: Use MongoDB by default (migration completed)
+const getModel = (modelName) => {
+  const useMongoDB = process.env.USE_MONGODB !== 'false'; // Default to true
+  
+  if (useMongoDB && mongoModels[modelName]) {
+    // Only log in development to reduce console noise
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🗃️ Using MongoDB model: ${modelName}`);
+    }
+    return mongoModels[modelName];
+  }
+  
+  // Fallback to PostgreSQL models
+  const postgresModels = {
+    User, College, Student, Faculty, Course, Section, Department, Transaction, Fee, Lab,
+    Hostel, HostelRoom, HostelAllocation, Attendance, Assignment, AssignmentSubmission,
+    Exam, ExamHall, ExamResult, LibraryBook, LibraryIssue, Classroom, Timetable,
+    CourseEnrollment, FacultySubstitution, Permission, RolePermission, PasswordResetRequest
+  };
+  
+  if (postgresModels[modelName]) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🐘 Using PostgreSQL model: ${modelName}`);
+    }
+    return postgresModels[modelName];
+  }
+  
+  console.warn(`⚠️ Model ${modelName} not found in either database`);
+  return null;
+};
 
 // Cross-module associations that need to be defined at the global level
 // These are associations between models from different modules
@@ -74,6 +108,7 @@ Faculty.belongsTo(Department, { foreignKey: 'departmentId', as: 'department' });
 Faculty.hasMany(Section, { foreignKey: 'classTeacherId', as: 'sections' });
 Faculty.hasMany(Course, { foreignKey: 'facultyId', as: 'courses' });
 Faculty.hasMany(Exam, { foreignKey: 'invigilatorId', as: 'invigilatedExams' });
+Faculty.hasMany(Timetable, { foreignKey: 'facultyId', as: 'timetableEntries' });
 
 // Department cross-module associations
 Department.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
@@ -88,8 +123,15 @@ Course.belongsTo(Faculty, { foreignKey: 'facultyId', as: 'faculty' });
 Course.hasMany(Attendance, { foreignKey: 'courseId', as: 'attendance' });
 Course.hasMany(Assignment, { foreignKey: 'courseId', as: 'assignments' });
 Course.hasMany(Exam, { foreignKey: 'courseId', as: 'exams' });
-Course.belongsToMany(Student, { through: 'StudentCourses', as: 'students' });
-Student.belongsToMany(Course, { through: 'StudentCourses', as: 'courses' });
+Course.belongsToMany(Student, { through: CourseEnrollment, as: 'students', foreignKey: 'courseId' });
+Student.belongsToMany(Course, { through: CourseEnrollment, as: 'courses', foreignKey: 'studentId' });
+
+// CourseEnrollment associations
+CourseEnrollment.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
+CourseEnrollment.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+CourseEnrollment.belongsTo(Section, { foreignKey: 'sectionId', as: 'section' });
+Student.hasMany(CourseEnrollment, { foreignKey: 'studentId', as: 'enrollments' });
+Course.hasMany(CourseEnrollment, { foreignKey: 'courseId', as: 'enrollments' });
 
 // Hostel cross-module associations
 Hostel.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
@@ -142,9 +184,10 @@ Student.hasMany(Attendance, { foreignKey: 'studentId', as: 'attendance' });
 Faculty.hasMany(Attendance, { foreignKey: 'facultyId', as: 'attendanceRecords' });
 
 // Assignment cross-module associations
-Assignment.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+Assignment.belongsTo(Section, { foreignKey: 'sectionId', as: 'section' });
 Assignment.belongsTo(Faculty, { foreignKey: 'facultyId', as: 'faculty' });
 Assignment.hasMany(AssignmentSubmission, { foreignKey: 'assignmentId', as: 'submissions' });
+Section.hasMany(Assignment, { foreignKey: 'sectionId', as: 'assignments' });
 
 // AssignmentSubmission cross-module associations
 AssignmentSubmission.belongsTo(Assignment, { foreignKey: 'assignmentId', as: 'assignment' });
@@ -162,9 +205,28 @@ Timetable.belongsTo(Classroom, { foreignKey: 'classroomId', as: 'classroom' });
 Classroom.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 Classroom.hasMany(Timetable, { foreignKey: 'classroomId', as: 'timetableEntries' });
 
+// FacultySubstitution cross-module associations
+FacultySubstitution.belongsTo(Faculty, { foreignKey: 'absentFacultyId', as: 'absentFaculty' });
+FacultySubstitution.belongsTo(Faculty, { foreignKey: 'substituteFacultyId', as: 'substituteFaculty' });
+FacultySubstitution.belongsTo(Course, { foreignKey: 'courseId', as: 'course' });
+FacultySubstitution.belongsTo(Section, { foreignKey: 'sectionId', as: 'section' });
+FacultySubstitution.belongsTo(Timetable, { foreignKey: 'timetableId', as: 'timetable' });
+FacultySubstitution.belongsTo(User, { foreignKey: 'approvedBy', as: 'approver' });
+FacultySubstitution.belongsTo(User, { foreignKey: 'confirmedBy', as: 'confirmer' });
+Faculty.hasMany(FacultySubstitution, { foreignKey: 'absentFacultyId', as: 'absenceSubstitutions' });
+Faculty.hasMany(FacultySubstitution, { foreignKey: 'substituteFacultyId', as: 'substituteAssignments' });
+Course.hasMany(FacultySubstitution, { foreignKey: 'courseId', as: 'substitutions' });
+Section.hasMany(FacultySubstitution, { foreignKey: 'sectionId', as: 'substitutions' });
+Timetable.hasMany(FacultySubstitution, { foreignKey: 'timetableId', as: 'substitutions' });
+
 // Transaction cross-module associations
 Transaction.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
 Transaction.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
+
+// Fee cross-module associations
+Fee.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
+Fee.belongsTo(College, { foreignKey: 'collegeId', as: 'college' });
+Student.hasMany(Fee, { foreignKey: 'studentId', as: 'fees' });
 
 // Permission system associations
 RolePermission.belongsTo(Permission, { foreignKey: 'permissionId', as: 'permission' });
@@ -191,11 +253,13 @@ module.exports = {
   Section,
   Department,
   Transaction,
+  Fee,
   Lab,
   
   // Academic models
   Timetable,
   Classroom,
+  CourseEnrollment,
   
   // Student models
   Attendance,
@@ -203,6 +267,7 @@ module.exports = {
   // Faculty models
   Assignment,
   AssignmentSubmission,
+  FacultySubstitution,
   
   // Examination models
   Exam,
@@ -224,5 +289,13 @@ module.exports = {
   PasswordResetRequest,
   
   // MongoDB models
-  ...mongoModels
+  ...mongoModels,
+  
+  // Helper functions
+  getModel,
+  mongoModels,
+  
+  // Database adapter
+  mongoAdapter: require('../mongoAdapter'),
+  dbSync: require('../dbSync')
 };

@@ -3,6 +3,16 @@ const { SystemLog } = require('../db/models/mongodb');
 class LoggingService {
   static async log(level, event, action, userId, data = {}, options = {}) {
     try {
+      // Check if MongoDB is available before attempting to save
+      if (!SystemLog.db || SystemLog.db.readyState !== 1) {
+        // MongoDB not available, log to console as fallback
+        console.log(`[${level.toUpperCase()}] ${event}:${action} - User: ${userId}`, {
+          data,
+          options
+        });
+        return null;
+      }
+
       const logEntry = new SystemLog({
         level,
         event,
@@ -21,11 +31,23 @@ class LoggingService {
         error: options.error
       });
 
-      await logEntry.save();
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('MongoDB operation timeout')), 5000)
+      );
+
+      await Promise.race([logEntry.save(), timeoutPromise]);
       return logEntry;
     } catch (error) {
-      console.error('Failed to save log:', error);
+      console.error('Failed to save log to MongoDB:', error.message);
+      // Fallback to console logging
+      console.log(`[${level.toUpperCase()}] ${event}:${action} - User: ${userId}`, {
+        data,
+        error: error.message,
+        options
+      });
       // Don't throw error to prevent logging from breaking main functionality
+      return null;
     }
   }
 

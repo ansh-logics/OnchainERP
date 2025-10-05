@@ -58,6 +58,10 @@ const User = sequelize.define('User', {
       is: /^\d{10}$/
     }
   },
+  profilePicture: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

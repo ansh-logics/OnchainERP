@@ -1,4 +1,4 @@
-const { Faculty, Student, Course, User, Department } = require('../../shared/db/models');
+const { Faculty, Student, Course, User, Department, Fee, Transaction, Section, sequelize } = require('../../shared/db/models');
 const { Op } = require('sequelize');
 const ErrorResponse = require('../../shared/utils/errorResponse');
 const LoggingService = require('../../shared/services/LoggingService');
@@ -42,7 +42,13 @@ exports.getFaculty = async (req, res, next) => {
         },
         {
           model: Course,
+          as: 'courses',  // Fixed: Added correct alias
           attributes: ['code', 'name', 'credits']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code']
         }
       ]
     });
@@ -58,6 +64,49 @@ exports.getFaculty = async (req, res, next) => {
       data: faculty
     });
   } catch (error) {
+    console.error('Error fetching faculty:', error);
+    next(error);
+  }
+};
+
+// @desc    Get current faculty profile
+// @route   GET /api/faculty/profile
+// @access  Private/Faculty
+exports.getMyProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const faculty = await Faculty.findOne({
+      where: { userId: userId },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: Course,
+          as: 'courses',
+          attributes: ['id', 'code', 'name', 'credits']
+        }
+      ]
+    });
+
+    if (!faculty) {
+      return next(new ErrorResponse('Faculty profile not found', 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: faculty
+    });
+  } catch (error) {
+    console.error('Error fetching faculty profile:', error);
     next(error);
   }
 };
@@ -600,6 +649,405 @@ exports.createFaculty = async (req, res, next) => {
       message: `Faculty created successfully`
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get student fees for faculty (read-only access to students in faculty's classes)
+// @route   GET /api/faculty/fees
+// @access  Private/Faculty
+exports.getStudentFeesForFaculty = async (req, res, next) => {
+  try {
+    // Get the faculty member
+    const faculty = await Faculty.findOne({
+      where: { userId: req.user.id },
+      include: [
+        {
+          model: Course,
+          as: 'courses',
+          attributes: ['id', 'code', 'name']
+        }
+      ]
+    });
+
+    if (!faculty) {
+      return next(new ErrorResponse('Faculty profile not found', 404));
+    }
+
+    // Get course IDs taught by this faculty
+    const courseIds = faculty.courses.map(course => course.id);
+
+    if (courseIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        message: 'No courses assigned to this faculty member'
+      });
+    }
+
+    // Get students enrolled in these courses with their fee information
+    const students = await Student.findAll({
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['name', 'code']
+        },
+        {
+          model: Fee,
+          as: 'fees',
+          where: { isActive: true },
+          required: false
+        },
+        {
+          model: Course,
+          as: 'courses',
+          where: { id: { [Op.in]: courseIds } },
+          attributes: ['id', 'code', 'name'],
+          through: { attributes: [] }
+        }
+      ],
+      order: [['enrollmentNumber', 'ASC']]
+    });
+
+    // Transform data to include fee summary
+    const feeData = students.map(student => {
+      const currentFee = student.fees && student.fees.length > 0 
+        ? student.fees[0] 
+        : null;
+
+      return {
+        studentId: student.id,
+        enrollmentNumber: student.enrollmentNumber,
+        rollNumber: student.rollNumber,
+        name: student.user.name,
+        email: student.user.email,
+        department: student.department?.name,
+        section: student.section?.name,
+        currentSemester: student.currentSemester,
+        feeSummary: {
+          totalFees: currentFee ? currentFee.totalFees : 0,
+          paidAmount: currentFee ? currentFee.paidAmount : 0,
+          remainingAmount: currentFee ? currentFee.remainingAmount : 0,
+          feeStatus: currentFee ? currentFee.feeStatus : 'Unpaid'
+        }
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: feeData.length,
+      data: feeData
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get student payments for faculty dashboard
+// @route   GET /api/faculty/:id/students/payments
+// @access  Private/Faculty
+exports.getFacultyStudentPayments = async (req, res, next) => {
+  try {
+    const faculty = await Faculty.findByPk(req.params.id);
+    
+    if (!faculty) {
+      return next(new ErrorResponse(`Faculty not found with id of ${req.params.id}`, 404));
+    }
+
+    // Check authorization - only the faculty themselves can access their data
+    if (faculty.userId.toString() !== req.user.id && req.user.role !== 'admin') {
+      return next(new ErrorResponse(`Not authorized to access this faculty's data`, 403));
+    }
+
+    const { status, semester, section } = req.query;
+
+    // Build where clause for students in faculty's department
+    const studentWhere = {
+      departmentId: faculty.departmentId
+    };
+
+    if (semester) {
+      studentWhere.currentSemester = semester;
+    }
+    if (section) {
+      studentWhere.sectionId = section;
+    }
+
+    // Build where clause for transactions
+    const transactionWhere = {
+      type: 'income'
+    };
+
+    if (status) {
+      transactionWhere.status = status;
+    }
+
+    // Get students and their transactions
+    const students = await Student.findAll({
+      where: studentWhere,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email']
+        },
+        {
+          model: Section,
+          as: 'section',
+          attributes: ['name', 'code'],
+          required: false
+        },
+        {
+          model: Transaction,
+          as: 'transactions',
+          where: transactionWhere,
+          required: false,
+          order: [['paidDate', 'DESC']]
+        },
+        {
+          model: Fee,
+          as: 'fees',
+          where: { isActive: true },
+          required: false
+        }
+      ],
+      order: [['enrollmentNumber', 'ASC']]
+    });
+
+    // Transform student payment data
+    const studentPayments = students.map(student => {
+      const paidTransactions = student.transactions 
+        ? student.transactions.filter(t => t.status === 'paid') 
+        : [];
+      const pendingTransactions = student.transactions 
+        ? student.transactions.filter(t => ['pending', 'overdue'].includes(t.status)) 
+        : [];
+
+      const currentFee = student.fees && student.fees.length > 0 ? student.fees[0] : null;
+
+      return {
+        studentId: student.id,
+        name: student.user.name,
+        email: student.user.email,
+        enrollmentNumber: student.enrollmentNumber,
+        rollNumber: student.rollNumber,
+        section: student.section?.name,
+        currentSemester: student.currentSemester,
+        paymentSummary: {
+          totalPaid: paidTransactions.reduce((sum, t) => sum + parseFloat(t.amount) / 100, 0),
+          totalPending: pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amount) / 100, 0),
+          paidCount: paidTransactions.length,
+          pendingCount: pendingTransactions.length,
+          lastPaymentDate: paidTransactions.length > 0 ? paidTransactions[0].paidDate : null,
+          feeStatus: currentFee?.feeStatus || 'Unknown'
+        },
+        recentTransactions: paidTransactions.slice(0, 3).map(t => ({
+          id: t.id,
+          amount: parseFloat(t.amount) / 100,
+          paymentDate: t.paidDate,
+          paymentMethod: t.paymentMethod,
+          referenceNumber: t.referenceNumber
+        }))
+      };
+    });
+
+    // Calculate department summary
+    const departmentSummary = {
+      totalStudents: students.length,
+      studentsWithPaidFees: studentPayments.filter(s => s.paymentSummary.paidCount > 0).length,
+      studentsWithPendingFees: studentPayments.filter(s => s.paymentSummary.pendingCount > 0).length,
+      totalCollected: studentPayments.reduce((sum, s) => sum + s.paymentSummary.totalPaid, 0),
+      totalPending: studentPayments.reduce((sum, s) => sum + s.paymentSummary.totalPending, 0)
+    };
+
+    res.status(200).json({
+      success: true,
+      count: studentPayments.length,
+      departmentSummary,
+      data: studentPayments
+    });
+  } catch (error) {
+    console.error('Error fetching faculty student payments:', error);
+    next(error);
+  }
+};
+
+// @desc    Get faculty department financial overview
+// @route   GET /api/faculty/:id/dashboard/financial
+// @access  Private/Faculty
+exports.getFacultyFinancialOverview = async (req, res, next) => {
+  try {
+    const faculty = await Faculty.findByPk(req.params.id, {
+      include: [
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['name', 'code']
+        }
+      ]
+    });
+    
+    if (!faculty) {
+      return next(new ErrorResponse(`Faculty not found with id of ${req.params.id}`, 404));
+    }
+
+    // Check authorization
+    if (faculty.userId.toString() !== req.user.id && req.user.role !== 'admin') {
+      return next(new ErrorResponse(`Not authorized to access this faculty's dashboard`, 403));
+    }
+
+    // Get current month date range
+    const currentDate = new Date();
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    // Get students in faculty's department
+    const departmentStudents = await Student.findAll({
+      where: { departmentId: faculty.departmentId },
+      attributes: ['id']
+    });
+
+    const studentIds = departmentStudents.map(s => s.id);
+
+    if (studentIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          departmentInfo: {
+            name: faculty.department?.name,
+            code: faculty.department?.code
+          },
+          overview: {
+            totalStudents: 0,
+            monthlyCollection: 0,
+            totalCollection: 0,
+            pendingAmount: 0,
+            recentPayments: []
+          }
+        }
+      });
+    }
+
+    // Get monthly transactions for department students
+    const monthlyTransactions = await Transaction.find({
+      studentId: { $in: studentIds },
+      type: 'income',
+      status: 'paid',
+      paidDate: {
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    });
+
+    // Get all-time transactions for department students
+    const allTransactions = await Transaction.aggregate([
+      {
+        $match: {
+          studentId: { $in: studentIds },
+          type: 'income'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaid: {
+            $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] }
+          },
+          totalPending: {
+            $sum: { $cond: [{ $in: ['$status', ['pending', 'overdue']] }, '$amount', 0] }
+          }
+        }
+      }
+    ]);
+
+    // Get recent payments with student details
+    const recentPayments = await Transaction.find({
+      studentId: { $in: studentIds },
+      type: 'income',
+      status: 'paid'
+    })
+    .populate({
+      path: 'studentId',
+      populate: {
+        path: 'userId',
+        select: 'name'
+      }
+    })
+    .sort({ paidDate: -1 })
+    .limit(10);
+
+    const overview = {
+      totalStudents: departmentStudents.length,
+      monthlyCollection: monthlyTransactions.reduce((sum, t) => sum + parseFloat(t.amount) / 100, 0),
+      totalCollection: parseFloat(allTransactions[0]?.totalPaid || 0) / 100,
+      pendingAmount: parseFloat(allTransactions[0]?.totalPending || 0) / 100,
+      recentPayments: recentPayments.map(t => ({
+        id: t.id,
+        amount: parseFloat(t.amount) / 100,
+        paymentDate: t.paidDate,
+        studentName: t.student?.user?.name || 'Unknown',
+        paymentMethod: t.paymentMethod,
+        referenceNumber: t.referenceNumber
+      }))
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        departmentInfo: {
+          name: faculty.department?.name,
+          code: faculty.department?.code
+        },
+        overview
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching faculty financial overview:', error);
+    next(error);
+  }
+};
+
+// @desc    Get courses assigned to the logged-in faculty
+// @route   GET /api/faculty-services/faculty/courses
+// @access  Private/Faculty
+exports.getFacultyCourses = async (req, res, next) => {
+  try {
+    const facultyId = req.user.facultyProfile?.id;
+
+    if (!facultyId) {
+      return next(new ErrorResponse('Faculty profile not found', 404));
+    }
+
+    // Get courses assigned to this faculty
+    const courses = await Course.findAll({
+      where: {
+        facultyId: facultyId
+      },
+      attributes: ['id', 'code', 'name', 'credits', 'courseType', 'semester'],
+      include: [
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'shortName']
+        }
+      ],
+      order: [['semester', 'ASC'], ['name', 'ASC']]
+    });
+
+    res.status(200).json({
+      success: true,
+      count: courses.length,
+      data: courses
+    });
+  } catch (error) {
+    console.error('Error fetching faculty courses:', error);
     next(error);
   }
 };

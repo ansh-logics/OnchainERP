@@ -1,0 +1,1082 @@
+const asyncHandler = require('express-async-handler');
+const { Assignment, AssignmentSubmission, Student, Section, Faculty, User, Timetable, Department } = require('../../shared/db/models');
+const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const LoggingService = require('../../shared/services/LoggingService');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../../../uploads/assignments');
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow common file types
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|txt|zip|rar|ppt|pptx|xls|xlsx/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only allowed file types are permitted!'));
+    }
+  }
+}).array('files', 5); // Allow up to 5 files
+
+// @desc    Get sections assigned to faculty
+// @route   GET /api/faculty-services/assignments/sections
+// @access  Private (Faculty)  
+const getFacultySections = asyncHandler(async (req, res) => {
+  console.log('🔍 getFacultySections called');
+  console.log('🔍 User:', req.user);
+
+  // Temporary: For testing, let's return all sections if no authenticated user
+  if (!req.user || !req.user.id) {
+    console.log('⚠️ No authenticated user, returning all sections for testing');
+    try {
+      const allSections = await Section.findAll({
+        where: { isActive: true },
+        attributes: ['id', 'name', 'code', 'batch', 'semester', 'currentStrength'],
+        include: [{
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code']
+        }],
+        limit: 10 // Limit for testing
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: allSections.length,
+        data: allSections,
+        message: 'Test data - authentication bypassed'
+      });
+    } catch (error) {
+      console.error('Error fetching test sections:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch test sections'
+      });
+    }
+  }
+
+  const facultyUserId = req.user.id;
+
+  // Get faculty profile
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  });
+
+  if (!faculty) {
+    return res.status(404).json({
+      success: false,
+      message: 'Faculty profile not found'
+    });
+  }
+
+  try {
+    // Get unique sections assigned to this faculty from timetable
+    const timetableEntries = await Timetable.findAll({
+      where: {
+        facultyId: faculty.id,
+        isActive: true
+      },
+      include: [
+        {
+          model: Section,
+          as: 'section',
+          attributes: ['id', 'name', 'code', 'batch', 'semester', 'currentStrength'],
+          include: [{
+            model: Department,
+            as: 'department',
+            attributes: ['id', 'name', 'code']
+          }]
+        }
+      ]
+    });
+
+    // Extract unique sections
+    const sectionMap = new Map();
+    timetableEntries.forEach(entry => {
+      if (entry.section && !sectionMap.has(entry.section.id)) {
+        sectionMap.set(entry.section.id, entry.section);
+      }
+    });
+
+    const uniqueSections = Array.from(sectionMap.values());
+
+    // If no sections found in timetable, try to get all sections from faculty's department
+    if (uniqueSections.length === 0) {
+      const departmentSections = await Section.findAll({
+        where: {
+          departmentId: faculty.departmentId,
+          isActive: true
+        },
+        attributes: ['id', 'name', 'code', 'batch', 'semester', 'currentStrength'],
+        include: [{
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code']
+        }]
+      });
+      
+      uniqueSections.push(...departmentSections);
+    }
+
+    await LoggingService.log({
+      level: 'info',
+      message: `Faculty ${faculty.id} accessed sections list`,
+      userId: req.user.id,
+      details: {
+        sectionsCount: uniqueSections.length,
+        source: uniqueSections.length > 0 ? 'timetable' : 'department'
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      count: uniqueSections.length,
+      data: uniqueSections
+    });
+
+  } catch (error) {
+    console.error('Error fetching faculty sections:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sections'
+    });
+  }
+});
+
+// @desc    Get all assignments created by faculty
+// @route   GET /api/faculty-services/assignments
+// @access  Private (Faculty) - temporarily public for development
+const getAllFacultyAssignments = asyncHandler(async (req, res) => {
+  try {
+    let facultyUserId;
+    
+    if (req.user && req.user.id) {
+      // Authenticated user
+      facultyUserId = req.user.id;
+    } else {
+      // Development mode: use first available faculty
+      console.log('⚠️ Development mode: Getting assignments for first faculty');
+      const firstFaculty = await Faculty.findOne({ 
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id']
+        }]
+      });
+      
+      if (firstFaculty && firstFaculty.user) {
+        facultyUserId = firstFaculty.user.id;
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: 'No faculty found'
+        });
+      }
+    }
+
+    // Get faculty profile
+    const faculty = await Faculty.findOne({
+      where: { userId: facultyUserId }
+    });
+
+    if (!faculty) {
+      return res.status(404).json({
+        success: false,
+        message: 'Faculty profile not found'
+      });
+    }
+
+    // Get all assignments created by this faculty
+    const assignments = await Assignment.findAndCountAll({
+      where: {
+        facultyId: faculty.id,
+        isActive: true
+      },
+      include: [
+        {
+          model: Section,
+          as: 'section',
+          attributes: ['id', 'name', 'code', 'batch'],
+          include: [{
+            model: Department,
+            as: 'department',
+            attributes: ['name', 'code']
+          }]
+        },
+        {
+          model: AssignmentSubmission,
+          as: 'submissions',
+          attributes: ['id', 'studentId', 'submissionDate', 'status'],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Add submission statistics to each assignment
+    const assignmentsWithStats = assignments.rows.map(assignment => {
+      const totalSubmissions = assignment.submissions ? assignment.submissions.length : 0;
+      
+      return {
+        ...assignment.toJSON(),
+        submissionStats: {
+          total: totalSubmissions,
+          pending: totalSubmissions > 0 ? assignment.submissions.filter(sub => sub.status === 'submitted').length : 0,
+          graded: totalSubmissions > 0 ? assignment.submissions.filter(sub => sub.status === 'graded').length : 0
+        }
+      };
+    });
+
+    console.log(`Found ${assignments.count} assignments for faculty ${faculty.id}`);
+
+    res.status(200).json({
+      success: true,
+      count: assignments.count,
+      data: assignmentsWithStats,
+      pagination: {
+        total: assignments.count,
+        pages: 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching faculty assignments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch assignments'
+    });
+  }
+});
+
+// @desc    Create assignment for a section
+// @route   POST /api/assignments
+// @access  Private (Faculty)
+const createAssignment = asyncHandler(async (req, res) => {
+  // Get faculty user ID - support both authenticated and development mode
+  let facultyUserId;
+  
+  if (req.user && req.user.id) {
+    // Authenticated user
+    facultyUserId = req.user.id;
+  } else {
+    // Development mode: use first available faculty
+    console.log('⚠️ Development mode: No authenticated user, using first faculty');
+    const firstFaculty = await Faculty.findOne({ 
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id']
+      }]
+    });
+    
+    if (firstFaculty && firstFaculty.user) {
+      facultyUserId = firstFaculty.user.id;
+    } else {
+    if (firstFaculty && firstFaculty.user) {
+      facultyUserId = firstFaculty.user.id;
+    } else {age: 'No faculty found for testing'
+      return res.status(404).json({
+        success: false,
+        message: 'No faculty found'
+      });
+    }st {
+  } title,
+    description,
+  const {uctions,
+    title,nId,
+    description,pe,
+    instructions,mat,
+    sectionId,
+    assignmentType,
+    submissionFormat,te,
+    maxMarks,nEndDate,
+    dueDate,eSubmission,
+    submissionStartDate,y,
+    submissionEndDate,
+    allowLateSubmission,
+    lateSubmissionPenalty,
+    allowedFileTypes,
+    maxFileSize,
+    maxFilesulty profile
+  } = req.body; = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  // Get faculty profile
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  });eturn res.status(404).json({
+      success: false,
+  if (!faculty) {aculty profile not found'
+    return res.status(404).json({
+      success: false,
+      message: 'Faculty profile not found'
+    });rify faculty is assigned to this section
+  }onst timetableEntry = await Timetable.findOne({
+    where: {
+  // Note: Removing timetable restriction to allow faculty to create assignments for any section
+  // This enables the upload/view features for both faculty and students
+      isActive: true
+  const assignment = await Assignment.create({
+    sectionId,
+    facultyId: faculty.id,
+    title,etableEntry) {
+    description,tatus(403).json({
+    instructions: instructions || null,
+    assignmentType, are not assigned to this section'
+    submissionFormat: submissionFormat || 'pdf',
+    maxMarks,
+    assignedDate: new Date(),
+    dueDate,gnment = await Assignment.create({
+    submissionStartDate: submissionStartDate || new Date(),
+    submissionEndDate: submissionEndDate || dueDate,
+    allowLateSubmission: allowLateSubmission || false,
+    lateSubmissionPenalty: lateSubmissionPenalty || 0,
+    allowedFileTypes: allowedFileTypes || ['pdf', 'doc', 'docx'],
+    maxFileSize: maxFileSize || 10485760,
+    maxFiles: maxFiles || 1,sionFormat || 'pdf',
+    status: 'active'
+  });ssignedDate: new Date(),
+    dueDate,
+  // Log successful assignment creationtDate || new Date(),
+  console.log(`Assignment created successfully: ${assignment.id} for section ${sectionId}`);
+    allowLateSubmission: allowLateSubmission || false,
+  res.status(201).json({y: lateSubmissionPenalty || 0,
+    success: true,es: allowedFileTypes || ['pdf', 'doc', 'docx'],
+    message: 'Assignment created successfully',
+    data: assignmentes || 1,
+  });tatus: 'active'
+}););
+
+// @desc    Get assignments for a section
+// @route   GET /api/assignments/section/:sectionId
+// @access  Private (Faculty)ted for section ${sectionId}`,
+const getSectionAssignments = asyncHandler(async (req, res) => {
+  const { sectionId } = req.params;
+  const facultyUserId = req.user.id;
+  const { page = 1, limit = 20, status } = req.query;
+      sectionId
+  // Get faculty profile
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  });.status(201).json({
+    success: true,
+  if (!faculty) {ignment created successfully',
+    return res.status(404).json({
+      success: false,
+      message: 'Faculty profile not found'
+    });
+  }@desc    Get assignments for a section
+// @route   GET /api/assignments/section/:sectionId
+  // Verify faculty is assigned to this section
+  const timetableEntry = await Timetable.findOne({req, res) => {
+    where: {ctionId } = req.params;
+      facultyId: faculty.id,user.id;
+      sectionId: sectionId, 20, status } = req.query;
+      isActive: true
+    }Get faculty profile
+  });st faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  if (!timetableEntry) {
+    return res.status(403).json({
+      success: false,
+      message: 'You are not assigned to this section'
+    });uccess: false,
+  }   message: 'Faculty profile not found'
+    });
+  const whereClause = {
+    sectionId,
+    facultyId: faculty.id,igned to this section
+    isActive: truentry = await Timetable.findOne({
+  };where: {
+      facultyId: faculty.id,
+  if (status) whereClause.status = status;
+      isActive: true
+  const assignments = await Assignment.findAndCountAll({
+    where: whereClause,
+    include: [
+      {timetableEntry) {
+        model: Section,03).json({
+        as: 'section',
+        attributes: ['id', 'name', 'code', 'batch'],'
+        include: [{
+          model: Department,
+          as: 'department',
+          attributes: ['name', 'code']
+        }]nId,
+      },ltyId: faculty.id,
+      {ctive: true
+        model: AssignmentSubmission,
+        as: 'submissions',
+        attributes: ['id', 'studentId', 'submissionDate', 'status', 'marksObtained']
+      }
+    ],t assignments = await Assignment.findAndCountAll({
+    limit: parseInt(limit),
+    offset: (parseInt(page) - 1) * parseInt(limit),
+    order: [['dueDate', 'ASC']]
+  });   model: Section,
+        as: 'section',
+  // Add submission statistics for each assignment],
+  const assignmentsWithStats = assignments.rows.map(assignment => {
+    const totalSubmissions = assignment.submissions.length;
+    const gradedSubmissions = assignment.submissions.filter(s => s.marksObtained !== null).length;
+    const pendingGrading = totalSubmissions - gradedSubmissions;
+        }]
+    return {
+      ...assignment.toJSON(),
+      statistics: {gnmentSubmission,
+        totalSubmissions,,
+        gradedSubmissions, 'studentId', 'submissionDate', 'status', 'marksObtained']
+        pendingGrading,
+        submissionRate: assignment.section.currentStrength > 0 
+          ? Math.round((totalSubmissions / assignment.section.currentStrength) * 100) 
+          : 0parseInt(page) - 1) * parseInt(limit),
+      }er: [['dueDate', 'ASC']]
+    };
+  });
+  // Add submission statistics for each assignment
+  await LoggingService.log({ = assignments.rows.map(assignment => {
+    level: 'info',missions = assignment.submissions.length;
+    message: `Faculty ${faculty.id} accessed assignments for section ${sectionId}`,= null).length;
+    userId: req.user.id, = totalSubmissions - gradedSubmissions;
+    details: {
+      sectionId,
+      assignmentsCount: assignments.count
+    } statistics: {
+  });   totalSubmissions,
+        gradedSubmissions,
+  res.status(200).json({
+    success: true,Rate: assignment.section.currentStrength > 0 
+    count: assignments.count,Submissions / assignment.section.currentStrength) * 100) 
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: assignments.count,
+      pages: Math.ceil(assignments.count / parseInt(limit))
+    },t LoggingService.log({
+    data: assignmentsWithStats
+  });essage: `Faculty ${faculty.id} accessed assignments for section ${sectionId}`,
+}); userId: req.user.id,
+    details: {
+// @desc    Update assignment
+// @route   PUT /api/assignments/:idcount
+// @access  Private (Faculty)
+const updateAssignment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const facultyUserId = req.user.id;
+    success: true,
+  // Get faculty profileount,
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  }); limit: parseInt(limit),
+      total: assignments.count,
+  if (!faculty) {.ceil(assignments.count / parseInt(limit))
+    return res.status(404).json({
+      success: false,WithStats
+      message: 'Faculty profile not found'
+    });
+  }
+// @desc    Update assignment
+  const assignment = await Assignment.findOne({
+    where: {Private (Faculty)
+      id,ateAssignment = asyncHandler(async (req, res) => {
+      facultyId: faculty.id,
+      isActive: trued = req.user.id;
+    }
+  });Get faculty profile
+  const faculty = await Faculty.findOne({
+  if (!assignment) { facultyUserId }
+    return res.status(404).json({
+      success: false,
+      message: 'Assignment not found or you do not have access'
+    });urn res.status(404).json({
+  }   success: false,
+      message: 'Faculty profile not found'
+  // Update assignment
+  const updatedAssignment = await assignment.update(req.body);
+
+  await LoggingService.log({ssignment.findOne({
+    level: 'info',
+    message: `Assignment ${id} updated`,
+    userId: req.user.id,.id,
+    details: {: true
+      assignmentId: id,
+      changes: req.body
+    }
+  });(!assignment) {
+    return res.status(404).json({
+  res.status(200).json({
+    success: true,signment not found or you do not have access'
+    message: 'Assignment updated successfully',
+    data: updatedAssignment
+  });
+});/ Update assignment
+  const updatedAssignment = await assignment.update(req.body);
+// @desc    Delete assignment
+// @route   DELETE /api/assignments/:id
+// @access  Private (Faculty)
+const deleteAssignment = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const facultyUserId = req.user.id;
+      assignmentId: id,
+  // Get faculty profile
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  });
+  res.status(200).json({
+  if (!faculty) {,
+    return res.status(404).json({successfully',
+      success: false,gnment
+      message: 'Faculty profile not found'
+    });
+  }
+// @desc    Delete assignment
+  const assignment = await Assignment.findOne({
+    where: {Private (Faculty)
+      id,eteAssignment = asyncHandler(async (req, res) => {
+      facultyId: faculty.id,
+      isActive: trued = req.user.id;
+    }
+  });Get faculty profile
+  const faculty = await Faculty.findOne({
+  if (!assignment) { facultyUserId }
+    return res.status(404).json({
+      success: false,
+      message: 'Assignment not found or you do not have access'
+    });urn res.status(404).json({
+  }   success: false,
+      message: 'Faculty profile not found'
+  // Soft delete
+  await assignment.update({ isActive: false });
+
+  await LoggingService.log({ssignment.findOne({
+    level: 'info',
+    message: `Assignment ${id} deleted`,
+    userId: req.user.id,.id,
+    details: {: true
+      assignmentId: id,
+      title: assignment.title
+    }
+  });(!assignment) {
+    return res.status(404).json({
+  res.status(200).json({
+    success: true,signment not found or you do not have access'
+    message: 'Assignment deleted successfully'
+  });
+});
+  // Soft delete
+// @desc    Get all submissions for an assignment
+// @route   GET /api/assignments/:id/submissions
+// @access  Private (Faculty)
+const getAssignmentSubmissions = asyncHandler(async (req, res) => {
+  const { id } = req.params;d} deleted`,
+  const facultyUserId = req.user.id;
+  const { page = 1, limit = 50, status } = req.query;
+      assignmentId: id,
+  // Get faculty profiletitle
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  });
+  res.status(200).json({
+  if (!faculty) {,
+    return res.status(404).json({successfully'
+      success: false,
+      message: 'Faculty profile not found'
+    });
+  }@desc    Get all submissions for an assignment
+// @route   GET /api/assignments/:id/submissions
+  // Get assignment and verify ownership
+  const assignment = await Assignment.findOne({sync (req, res) => {
+    where: { } = req.params;
+      id,acultyUserId = req.user.id;
+      facultyId: faculty.id,50, status } = req.query;
+      isActive: true
+    },et faculty profile
+    include: [{ = await Faculty.findOne({
+      model: Section,facultyUserId }
+      as: 'section',
+      attributes: ['id', 'name', 'code', 'currentStrength']
+    }]!faculty) {
+  });eturn res.status(404).json({
+      success: false,
+  if (!assignment) {lty profile not found'
+    return res.status(404).json({
+      success: false,
+      message: 'Assignment not found or you do not have access'
+    });t assignment and verify ownership
+  }onst assignment = await Assignment.findOne({
+    where: {
+  const whereClause = { assignmentId: id };
+  if (status) whereClause.status = status;
+      isActive: true
+  const submissions = await AssignmentSubmission.findAndCountAll({
+    where: whereClause,
+    include: [ection,
+      {s: 'section',
+        model: Student,, 'name', 'code', 'currentStrength']
+        as: 'student',
+        attributes: ['id', 'rollNumber', 'enrollmentNumber'],
+        include: [{
+          model: User,
+          as: 'user',(404).json({
+          attributes: ['name', 'email']
+        }]age: 'Assignment not found or you do not have access'
+      }
+    ],
+    limit: parseInt(limit),
+    offset: (parseInt(page) - 1) * parseInt(limit),
+    order: [['submissionDate', 'DESC']]us;
+  });
+  const submissions = await AssignmentSubmission.findAndCountAll({
+  await LoggingService.log({
+    level: 'info',
+    message: `Faculty ${faculty.id} accessed submissions for assignment ${id}`,
+    userId: req.user.id,
+    details: {tudent',
+      assignmentId: id,d', 'rollNumber', 'enrollmentNumber'],
+      submissionsCount: submissions.count
+    }     model: User,
+  });     as: 'user',
+          attributes: ['name', 'email']
+  res.status(200).json({
+    success: true,
+    count: submissions.count,
+    assignment: {nt(limit),
+      id: assignment.id,ge) - 1) * parseInt(limit),
+      title: assignment.title, 'DESC']]
+      maxMarks: assignment.maxMarks,
+      dueDate: assignment.dueDate,
+      section: assignment.section
+    },vel: 'info',
+    pagination: {ulty ${faculty.id} accessed submissions for assignment ${id}`,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: submissions.count,
+      pages: Math.ceil(submissions.count / parseInt(limit))
+    },
+    data: submissions.rows
+  });
+});es.status(200).json({
+    success: true,
+// @desc    Grade assignment submission
+// @route   PUT /api/assignments/submissions/:submissionId/grade
+// @access  Private (Faculty)
+const gradeSubmission = asyncHandler(async (req, res) => {
+  const { submissionId } = req.params;
+  const { marksObtained, feedback, status } = req.body;
+  const facultyUserId = req.user.id;
+    },
+  // Get faculty profile
+  const faculty = await Faculty.findOne({
+    where: { userId: facultyUserId }
+  }); total: submissions.count,
+      pages: Math.ceil(submissions.count / parseInt(limit))
+  if (!faculty) {
+    return res.status(404).json({
+      success: false,
+      message: 'Faculty profile not found'
+    });
+  }@desc    Grade assignment submission
+// @route   PUT /api/assignments/submissions/:submissionId/grade
+  // Get submission and verify faculty has access
+  const submission = await AssignmentSubmission.findOne({{
+    where: { id: submissionId },arams;
+    include: [{Obtained, feedback, status } = req.body;
+      model: Assignment,req.user.id;
+      as: 'assignment',
+      where: { facultyId: faculty.id },
+      attributes: ['id', 'title', 'maxMarks']
+    }]ere: { userId: facultyUserId }
+  });
+
+  if (!submission) {
+    return res.status(404).json({
+      success: false,
+      message: 'Submission not found or you do not have access'
+    });
+  }
+
+  // Validate marks and verify faculty has access
+  if (marksObtained < 0 || marksObtained > submission.assignment.maxMarks) {
+    return res.status(400).json({
+      success: false,
+      message: `Marks must be between 0 and ${submission.assignment.maxMarks}`
+    });s: 'assignment',
+  }   where: { facultyId: faculty.id },
+      attributes: ['id', 'title', 'maxMarks']
+  // Update submission
+  const updatedSubmission = await submission.update({
+    marksObtained,
+    feedback: feedback || null,
+    status: status || 'graded',({
+    gradedAt: new Date(),
+    gradedBy: faculty.idon not found or you do not have access'
+  }););
+  }
+  await LoggingService.log({
+    level: 'info',s
+    message: `Submission ${submissionId} graded`,sion.assignment.maxMarks) {
+    userId: req.user.id,0).json({
+    details: { false,
+      submissionId,ks must be between 0 and ${submission.assignment.maxMarks}`
+      assignmentId: submission.assignment.id,
+      marksObtained,
+      maxMarks: submission.assignment.maxMarks
+    }Update submission
+  });st updatedSubmission = await submission.update({
+    marksObtained,
+  res.status(200).json({| null,
+    success: true, || 'graded',
+    message: 'Submission graded successfully',
+    data: updatedSubmission
+  });
+});
+  await LoggingService.log({
+// @desc    Get student assignments
+// @route   GET /api/assignments/student/:studentId
+// @access  Privater.id,
+const getStudentAssignments = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+  const { status, page = 1, limit = 10 } = req.query;
+      marksObtained,
+  // Get student's section.assignment.maxMarks
+  const student = await Student.findByPk(studentId, {
+    include: [{
+      model: Section,
+      as: 'section',on({
+      attributes: ['id', 'name', 'code']
+    }]ssage: 'Submission graded successfully',
+  });ata: updatedSubmission
+  });
+  if (!student || !student.sectionId) {
+    return res.status(404).json({
+      success: false,nt assignments
+      message: 'Student not found or not assigned to section'
+    });ess  Private
+  }st getStudentAssignments = asyncHandler(async (req, res) => {
+  const { studentId } = req.params;
+  const whereClause = {= 1, limit = 10 } = req.query;
+    sectionId: student.sectionId,
+    isActive: true section
+  };nst student = await Student.findByPk(studentId, {
+    include: [{
+  if (status) whereClause.status = status;
+      as: 'section',
+  const assignments = await Assignment.findAndCountAll({
+    where: whereClause,
+    include: [
+      {
+        model: Section,ent.sectionId) {
+        as: 'section',404).json({
+        attributes: ['id', 'name', 'code']
+      },ssage: 'Student not found or not assigned to section'
+      {
+        model: AssignmentSubmission,
+        as: 'submissions',
+        where: { studentId },
+        required: falsesectionId,
+      }ctive: true
+    ],
+    limit: parseInt(limit),
+    offset: (parseInt(page) - 1) * parseInt(limit),
+    order: [['dueDate', 'ASC']]
+  });st assignments = await Assignment.findAndCountAll({
+    where: whereClause,
+  // Add submission status for each assignment
+  const assignmentsWithStatus = assignments.rows.map(assignment => {
+    const submission = assignment.submissions[0];
+    return {'section',
+      ...assignment.toJSON(),ame', 'code']
+      submissionStatus: submission ? submission.status : 'not_submitted',
+      submission: submission || null,
+      isOverdue: new Date() > new Date(assignment.dueDate) && !submission
+    };  as: 'submissions',
+  });   where: { studentId },
+        required: false
+  res.status(200).json({
+    success: true,
+    count: assignments.count,
+    data: assignmentsWithStatus) * parseInt(limit),
+  });rder: [['dueDate', 'ASC']]
+}););
+
+// @desc    Get faculty assignments assignment
+// @route   GET /api/assignments/faculty/:facultyIdp(assignment => {
+// @access  Private (Faculty)ment.submissions[0];
+const getFacultyAssignments = asyncHandler(async (req, res) => {
+  const { facultyId } = req.params;
+  const { status, page = 1, limit = 10 } = req.query;s : 'not_submitted',
+      submission: submission || null,
+  const whereClause = { facultyId, isActive: true };eDate) && !submission
+  if (status) whereClause.status = status;
+  });
+  const assignments = await Assignment.findAndCountAll({
+    where: whereClause,{
+    include: [rue,
+      {nt: assignments.count,
+        model: Section,thStatus
+        as: 'section',
+        attributes: ['id', 'name', 'code']
+      }
+    ],sc    Get faculty assignments
+    limit: parseInt(limit),ments/faculty/:facultyId
+    offset: (parseInt(page) - 1) * parseInt(limit),
+    order: [['dueDate', 'ASC']]syncHandler(async (req, res) => {
+  });st { facultyId } = req.params;
+  const { status, page = 1, limit = 10 } = req.query;
+  // Get submission stats for each assignment
+  const assignmentsWithStats = await Promise.all( };
+    assignments.rows.map(async (assignment) => {
+      const submissionStats = await AssignmentSubmission.count({
+        where: { assignmentId: assignment.id },ountAll({
+        group: ['status']
+      });de: [
+      {
+      const stats = {n,
+        total: 0,ion',
+        submitted: 0,'id', 'name', 'code']
+        graded: 0,
+        returned: 0
+      };t: parseInt(limit),
+    offset: (parseInt(page) - 1) * parseInt(limit),
+      submissionStats.forEach(stat => {
+        stats.total += stat.count;
+        stats[stat.status] = stat.count;
+      });submission stats for each assignment
+  const assignmentsWithStats = await Promise.all(
+      return {s.rows.map(async (assignment) => {
+        ...assignment.toJSON(),wait AssignmentSubmission.count({
+        submissionStats: stats assignment.id },
+      };group: ['status']
+    })});
+  );
+      const stats = {
+  res.status(200).json({
+    success: true, 0,
+    count: assignments.count,
+    data: assignmentsWithStats
+  }); };
+});
+      submissionStats.forEach(stat => {
+// @desc    Get all assignments created by faculty
+// @route   GET /api/faculty-services/assignments
+// @access  Private (Faculty) - temporarily public for development
+const getAllFacultyAssignments = asyncHandler(async (req, res) => {
+  try {
+    let facultyUserId;        ...assignment.toJSON(),
+    
+    if (req.user && req.user.id) {    };
+      // Authenticated user
+      facultyUserId = req.user.id;
+    } else {
+      // Development mode: use first available faculty{
+      console.log('⚠️ Development mode: Getting assignments for first faculty');
+      const firstFaculty = await Faculty.findOne({ unt: assignments.count,
+        include: [{gnmentsWithStats
+          model: User,
+          as: 'user',
+          attributes: ['id']
+        }]
+      });/api/assignments/overdue
+      
+      if (firstFaculty && firstFaculty.user) {OverdueAssignments = asyncHandler(async (req, res) => {
+        facultyUserId = firstFaculty.user.id;{ collegeId, departmentId } = req.query;
+      } else {
+        return res.status(404).json({ew Date().toISOString().split('T')[0];
+          success: false,
+          message: 'No faculty found'ndAll({
+        });
+      }t]: currentDate },
+    }',
+
+    // Get faculty profile
+    const faculty = await Faculty.findOne({lude: [
+      where: { userId: facultyUserId }{
+    });
+   as: 'section',
+    if (!faculty) {        attributes: ['id', 'name', 'code', 'departmentId'],
+      return res.status(404).json({
+        success: false,})
+        message: 'Faculty profile not found'
+      });
+    }
+odel: Faculty,
+    // Get all assignments created by this faculty        as: 'faculty',
+    const assignments = await Assignment.findAndCountAll({
+      where: {
+        facultyId: faculty.id, model: User,
+        isActive: true          as: 'user',
+      },ibutes: ['name', 'email']
+      include: [
+        {
+          model: Section,
+          as: 'section',
+          attributes: ['id', 'name', 'code', 'batch'],
+          include: [{
+            model: Department,submission statistics for overdue assignments
+            as: 'department',overdueWithStats = await Promise.all(
+            attributes: ['name', 'code']signments.map(async (assignment) => {
+          }]  const totalSubmissions = await AssignmentSubmission.count({
+        },        where: { assignmentId: assignment.id }
+        {
+          model: AssignmentSubmission,
+          as: 'submissions',wait Student.count({
+          attributes: ['id', 'studentId', 'submissionDate', 'status'],: assignment.sectionId }
+          required: false });
+        }
+      ],      return {
+      order: [['createdAt', 'DESC']]ent.toJSON(),
+    });ts: {
+: totalSubmissions,
+    // Add submission statistics to each assignmentctedSubmissions,
+    const assignmentsWithStats = assignments.rows.map(assignment => {Submissions - totalSubmissions,
+      const totalSubmissions = assignment.submissions ? assignment.submissions.length : 0;nRate: expectedSubmissions > 0 ? Math.round((totalSubmissions / expectedSubmissions) * 100) : 0
+      
+      return {
+        ...assignment.toJSON(),  })
+        submissionStats: {  );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+};  getAllFacultyAssignments  gradeSubmission,  deleteAssignment,  updateAssignment,  getAssignmentSubmissions,  getSectionAssignments,  createAssignment,  getFacultySections,module.exports = {});  });    data: overdueWithStats    count: overdueWithStats.length,    success: true,  res.status(200).json({  );    })      };        }          submissionRate: expectedSubmissions > 0 ? Math.round((totalSubmissions / expectedSubmissions) * 100) : 0          pending: expectedSubmissions - totalSubmissions,          expected: expectedSubmissions,          submitted: totalSubmissions,        submissionStats: {        ...assignment.toJSON(),      return {      });        where: { sectionId: assignment.sectionId }      const expectedSubmissions = await Student.count({      });        where: { assignmentId: assignment.id }      const totalSubmissions = await AssignmentSubmission.count({    assignments.map(async (assignment) => {  const overdueWithStats = await Promise.all(  // Get submission statistics for overdue assignments  });    order: [['dueDate', 'ASC']]    ],      }        }]          attributes: ['name', 'email']          as: 'user',          model: User,        include: [{        attributes: ['id', 'employeeId'],        as: 'faculty',        model: Faculty,      {      },        }          ...(departmentId && { departmentId })        where: {        attributes: ['id', 'name', 'code', 'departmentId'],        as: 'section',        model: Section,      {    include: [    },      isActive: true      status: 'active',      dueDate: { [Op.lt]: currentDate },    where: {  const assignments = await Assignment.findAll({    const currentDate = new Date().toISOString().split('T')[0];  const { collegeId, departmentId } = req.query;const getOverdueAssignments = asyncHandler(async (req, res) => {// @access  Private (Admin)// @route   GET /api/assignments/overdue// @desc    Get overdue assignments});  }    });      message: 'Failed to fetch assignments'      success: false,    res.status(500).json({    console.error('Error fetching faculty assignments:', error);  } catch (error) {    });      }        pages: 1        total: assignments.count,      pagination: {      data: assignmentsWithStats,      count: assignments.count,      success: true,    res.status(200).json({    console.log(`Found ${assignments.count} assignments for faculty ${faculty.id}`);    });      };        }          graded: totalSubmissions > 0 ? assignment.submissions.filter(sub => sub.status === 'graded').length : 0          pending: totalSubmissions > 0 ? assignment.submissions.filter(sub => sub.status === 'submitted').length : 0,          total: totalSubmissions,
+  res.status(200).json({
+    success: true,
+    count: overdueWithStats.length,
+    data: overdueWithStats
+  });
+});
+
+module.exports = {
+  getFacultySections,
+  createAssignment,
+  getSectionAssignments,
+  getAssignmentSubmissions,
+  updateAssignment,
+  deleteAssignment,
+  gradeSubmission
+};

@@ -5,13 +5,23 @@ const {
   markBulkAttendance,
   getCourseAttendance,
   getAttendanceSummary,
+  getSectionAttendanceSummary,
   updateAttendance,
   deleteAttendance,
   // Simple demo endpoints
   getDepartmentSections,
   getSectionStudents,
   markSimpleAttendance,
-  getDepartmentAttendance
+  getDepartmentAttendance,
+  // Student endpoints
+  getStudentAttendance,
+  getStudentAttendancePercentage,
+  // Admin endpoints
+  getComprehensiveAttendanceReport,
+  getPeriodWiseStats,
+  // Department-level endpoints
+  getDepartmentWiseStats,
+  getDepartmentDetailedStats
 } = require('../controllers/attendanceController');
 
 const router = express.Router();
@@ -75,6 +85,12 @@ router.get(
   getAttendanceSummary
 );
 
+router.get(
+  '/summary/section/:sectionId',
+  authorize('faculty', 'admin'),
+  getSectionAttendanceSummary
+);
+
 router.put(
   '/:attendanceId',
   authorize('faculty', 'admin'),
@@ -87,6 +103,45 @@ router.delete(
   authorize('faculty', 'admin'),
   checkPermission('attendance', 'delete'),
   deleteAttendance
+);
+
+// Student attendance routes
+router.get(
+  '/student/my-attendance',
+  authorize('student'),
+  getStudentAttendance
+);
+
+router.get(
+  '/student/percentage',
+  authorize('student'),
+  getStudentAttendancePercentage
+);
+
+// Admin comprehensive reports
+router.get(
+  '/admin/comprehensive-report',
+  authorize('admin'),
+  getComprehensiveAttendanceReport
+);
+
+router.get(
+  '/admin/period-stats',
+  authorize('admin'),
+  getPeriodWiseStats
+);
+
+// Department-level attendance reports
+router.get(
+  '/admin/department-stats',
+  authorize('admin', 'faculty'),
+  getDepartmentWiseStats
+);
+
+router.get(
+  '/admin/department-detail/:departmentId',
+  authorize('admin', 'faculty'),
+  getDepartmentDetailedStats
 );
 
 module.exports = router;

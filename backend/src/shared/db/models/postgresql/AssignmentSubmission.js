@@ -34,6 +34,9 @@ const AssignmentSubmission = sequelize.define('AssignmentSubmission', {
   submissionText: {
     type: DataTypes.TEXT
   },
+  fileUrls: {
+    type: DataTypes.JSON
+  },
   marksObtained: {
     type: DataTypes.INTEGER
   },

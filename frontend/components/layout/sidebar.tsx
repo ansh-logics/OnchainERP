@@ -45,11 +45,11 @@ interface NavigationItem {
 }
 
 const getNavigationItems = (role: UserRole): NavigationItem[] => {
-  // Map faculty role to staff for routing
-  const routeRole = role === 'faculty' ? 'staff' : role;
+  // Use faculty role directly now that we have faculty routes
+  const routeRole = role;
   
   const baseItems = [
-    { name: "Dashboard", href: `/${routeRole}/dashboard`, icon: Home },
+    { name: "Dashboard", href: routeRole === 'faculty' ? '/faculty' : `/${routeRole}/dashboard`, icon: Home },
     { name: "Profile", href: `/${routeRole}/profile`, icon: Users },
     { name: "Notifications", href: "/notifications", icon: Bell },
     { name: "Settings", href: "/settings", icon: Settings },
@@ -60,6 +60,7 @@ const getNavigationItems = (role: UserRole): NavigationItem[] => {
       return [
         { name: "Dashboard", href: "/student/dashboard", icon: Home },
         { name: "Profile", href: "/student/profile", icon: Users },
+        { name: "My Attendance", href: "/student/attendance", icon: CalendarCheck },
         { name: "Courses", href: "/student/courses", icon: BookOpen },
         { name: "Assignments", href: "/student/assignments", icon: FileText },
         { name: "Library", href: "/student/library", icon: Book },
@@ -73,8 +74,10 @@ const getNavigationItems = (role: UserRole): NavigationItem[] => {
       return [
         { name: "Dashboard", href: "/staff/dashboard", icon: Home },
         { name: "Attendance", href: "/staff/attendance", icon: CalendarCheck },
+        { name: "Assignments", href: "/staff/assignments", icon: FileText },
+        { name: "Substitutions", href: "/staff/substitutions", icon: RefreshCw },
         { name: "Admissions", href: "/staff/admissions", icon: UserCheck },
-        { name: "Fee Collection", href: "/staff/fees", icon: DollarSign },
+        { name: "Student Fees", href: "/staff/fees", icon: DollarSign },
         { name: "Hostel Management", href: "/staff/hostel", icon: Building },
         { name: "Exam Management", href: "/staff/exams", icon: ClipboardList },
         { name: "Notifications", href: "/notifications", icon: Bell },
@@ -98,12 +101,15 @@ const getNavigationItems = (role: UserRole): NavigationItem[] => {
 
         // MODULE MANAGEMENT
         { name: "Admissions", href: "/admin/admissions", icon: GraduationCap, category: "Module Management" },
+        { name: "Faculty Substitutions", href: "/admin/substitutions", icon: RefreshCw, category: "Module Management" },
+        { name: "Fee Management", href: "/admin/fee-management", icon: DollarSign, category: "Module Management" },
         { name: "Fees & Payments", href: "/admin/fees-payments", icon: CreditCard, category: "Module Management" },
         { name: "Hostel Allocation", href: "/admin/hostel-allocation", icon: Building, category: "Module Management" },
-        { name: "Exam Scheduling", href: "/admin/exam-scheduling", icon: ClipboardList, category: "Module Management" },
+        { name: "Exam scheduling", href: "/admin/exam-scheduling", icon: ClipboardList, category: "Module Management" },
         { name: "Library Management", href: "/admin/library-management", icon: Library, category: "Module Management" },
 
         // REPORTS & MONITORING
+        { name: "Attendance Reports", href: "/admin/attendance-reports", icon: CalendarCheck, category: "Reports & Monitoring" },
         { name: "Reports", href: "/admin/reports", icon: BarChart3, category: "Reports & Monitoring" },
         { name: "System Logs", href: "/admin/logs", icon: FileText, category: "Reports & Monitoring" },
         { name: "Notifications", href: "/notifications", icon: Bell, category: "Reports & Monitoring" },
