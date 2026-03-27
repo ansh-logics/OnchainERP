@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000'
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001'
+
+function parseJsonSafe(text: string) {
+  if (!text || !text.trim()) {
+    return { success: false, message: 'Empty response from backend' }
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    return {
+      success: false,
+      message: 'Invalid JSON from backend',
+      detail: text.slice(0, 200)
+    }
+  }
+}
 
 // GET /api/finance/transactions
 export async function GET(request: NextRequest) {
@@ -26,7 +41,7 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const data = await response.json()
+    const data = parseJsonSafe(await response.text())
 
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status })
@@ -64,7 +79,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(body),
     })
 
-    const data = await response.json()
+    const data = parseJsonSafe(await response.text())
 
     if (!response.ok) {
       return NextResponse.json(data, { status: response.status })

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, User, Lock, UserCheck, Building2, AlertCircle } from "lucide-react"
 
-type UserRole = "student" | "faculty" | "admin"
+type UserRole = "student" | "faculty" | "admin" | "super_admin" | "cashier"
 
 interface LoginResponse {
   success: boolean
@@ -70,6 +70,8 @@ export function LoginForm() {
             router.push("/faculty")
             break
           case "admin":
+          case "super_admin":
+          case "cashier":
             router.push("/admin")
             break
           default:

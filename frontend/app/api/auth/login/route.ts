@@ -47,15 +47,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorData, { status: response.status })
     }
     
-    const data = await response.json()
+    const payload = await response.json()
+    // Express auth uses { success, token, data: user }; UI expects { user }
+    const user = payload.user ?? payload.data
     console.log('Backend authentication successful, data received:', {
-      success: data.success,
-      hasToken: !!data.token,
-      userRole: data.user?.role || 'no user data',
-      userId: data.user?.id || 'no user id'
+      success: payload.success,
+      hasToken: !!payload.token,
+      userRole: user?.role ?? 'no user data',
+      userId: user?.id ?? 'no user id'
     })
-    
-    return NextResponse.json(data, { status: response.status })
+
+    return NextResponse.json(
+      {
+        ...payload,
+        user
+      },
+      { status: response.status }
+    )
   } catch (backendError) {
     console.error('Backend connection failed:', backendError)
     console.log('Error details:', {
