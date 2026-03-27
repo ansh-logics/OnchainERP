@@ -83,6 +83,21 @@ services:
       - redis
     networks:
       - erp_network
+  
+  frontend:
+    build: ./frontend
+    container_name: yukti_erp_frontend
+    ports:
+      - :3000:3000
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - backend
+    networks:
+      - erp_network
 
 volumes:
   postgres_data:
