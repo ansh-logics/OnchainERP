@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 
 // Default matches docker-compose (postgres service) and .env.example
 const DEFAULT_POSTGRES = {
-  database: 'onchain_erp',
+  database: 'yukti_erp',
   user: 'postgres',
   password: 'postgres123',
   host: 'localhost',
@@ -14,6 +14,8 @@ const DEFAULT_POSTGRES = {
 const DEFAULT_MONGODB_URI = 'mongodb://localhost:27017/onchain_erp';
 
 // PostgreSQL — structured domain data (Sequelize)
+console.log(process.env.POSTGRES_HOST);
+console.log(process.env.MONGODB_URI); 
 const sequelize = new Sequelize(
   process.env.POSTGRES_DB || DEFAULT_POSTGRES.database,
   process.env.POSTGRES_USER || DEFAULT_POSTGRES.user,
