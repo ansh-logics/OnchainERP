@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User, Student, Faculty, College, Department } = require('../models');
-const { SystemLog } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 

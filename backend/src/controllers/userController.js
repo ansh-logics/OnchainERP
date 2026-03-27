@@ -1,5 +1,4 @@
 const { User } = require('../models');
-const { SystemLog } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 
@@ -8,17 +7,47 @@ const LoggingService = require('../services/LoggingService');
 // @access  Private/Admin
 exports.getUsers = async (req, res, next) => {
   try {
+    const where = {};
+    if (req.query.role) {
+      where.role = req.query.role;
+    }
+
+    const include = [];
+    if (req.query.role === 'student') {
+      include.push({
+        association: 'studentProfile',
+        attributes: ['id', 'enrollmentNumber'],
+        required: true
+      });
+    }
+
     const users = await User.findAll({
+      where,
       attributes: { exclude: ['password'] },
+      include,
       order: [['createdAt', 'DESC']]
     });
-    
-    // Log the action
+
+    let data = users.map((u) => u.get({ plain: true }));
+
+    if (req.query.role === 'student') {
+      data = data
+        .filter((u) => u.studentProfile)
+        .map((u) => ({
+          _id: u.studentProfile.id,
+          name: u.name,
+          email: u.email,
+          enrollmentNumber: u.studentProfile.enrollmentNumber
+        }));
+    } else {
+      data = data.map((u) => ({ ...u, _id: u.id }));
+    }
+
     await LoggingService.logUserAction(
       'get_all_users',
       req.user.id,
-      { count: users.length },
-      { 
+      { count: data.length },
+      {
         userRole: req.user.role,
         collegeId: req.user.college,
         ip: req.ip,
@@ -28,8 +57,8 @@ exports.getUsers = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      count: users.length,
-      data: users
+      count: data.length,
+      data
     });
   } catch (error) {
     await LoggingService.logError('user_management', 'get_all_users', req.user?.id, error);
@@ -121,10 +150,7 @@ exports.createUser = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateUser = async (req, res, next) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
+    const user = await User.findByPk(req.params.id);
 
     if (!user) {
       return next(
@@ -132,9 +158,18 @@ exports.updateUser = async (req, res, next) => {
       );
     }
 
+    const patch = { ...req.body };
+    delete patch.id;
+    delete patch.password;
+    await user.update(patch);
+
+    const updated = await User.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] }
+    });
+
     res.status(200).json({
       success: true,
-      data: user
+      data: { ...updated.get({ plain: true }), _id: updated.id }
     });
   } catch (error) {
     next(error);
@@ -146,7 +181,7 @@ exports.updateUser = async (req, res, next) => {
 // @access  Private/Admin
 exports.deleteUser = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
 
     if (!user) {
       return next(
@@ -154,7 +189,7 @@ exports.deleteUser = async (req, res, next) => {
       );
     }
 
-    await user.remove();
+    await user.destroy();
 
     res.status(200).json({
       success: true,

@@ -16,7 +16,7 @@ services:
     networks:
       - erp_network
 
-  # MongoDB for unstructured data
+  # MongoDB — system logs and unstructured documents (not domain entities)
   mongodb:
     image: mongo:7.0
     container_name: onchain_erp_mongodb

@@ -13,25 +13,29 @@ const {
 
 const router = express.Router();
 
-const { protect, authorize, checkPermission } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 
 // Protect all routes
 router.use(protect);
 
-// Basic course routes
+// Static path before /:id so "department" is not captured as an id
+router.get(
+  '/department/:department/semester/:semester',
+  authorize('admin'),
+  getCoursesByDepartmentAndSemester
+);
+
 router.route('/')
   .get(getCourses)
   .post(authorize('admin'), createCourse);
+
+router.put('/:id/faculty/:facultyId', authorize('admin'), assignFaculty);
+router.get('/:id/students', authorize('admin', 'faculty'), getCourseStudents);
+router.get('/:id/assignments', getCourseAssignments);
 
 router.route('/:id')
   .get(getCourse)
   .put(authorize('admin'), updateCourse)
   .delete(authorize('admin'), deleteCourse);
-
-// Special course routes
-router.get('/department/:department/semester/:semester', authorize('admin'), getCoursesByDepartmentAndSemester);
-router.put('/:id/faculty/:facultyId', authorize('admin'), assignFaculty);
-router.get('/:id/students', authorize('admin', 'faculty'), getCourseStudents);
-router.get('/:id/assignments', getCourseAssignments);
 
 module.exports = router;

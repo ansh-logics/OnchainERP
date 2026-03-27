@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User, Student, Faculty, College, Department } = require('../models');
-const { SystemLog } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 
@@ -384,13 +383,15 @@ exports.updatePassword = async (req, res, next) => {
 const sendTokenResponse = (user, statusCode, res) => {
   // Create token
   const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE,
+    expiresIn: process.env.JWT_EXPIRE || '30d',
   });
 
+  const cookieDays = Number(process.env.JWT_COOKIE_EXPIRE);
+  const days = Number.isFinite(cookieDays) && cookieDays > 0 ? cookieDays : 30;
+  const maxAgeMs = days * 24 * 60 * 60 * 1000;
+
   const options = {
-    expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000,
-    ),
+    maxAge: maxAgeMs,
     httpOnly: true,
   };
 

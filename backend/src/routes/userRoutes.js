@@ -11,19 +11,15 @@ const router = express.Router();
 
 const { protect, authorize } = require('../middleware/auth');
 
-// All routes below will use these middlewares
 router.use(protect);
-router.use(authorize('admin'));
 
-router
-  .route('/')
-  .get(getUsers)
-  .post(createUser);
+router.get('/', authorize('admin', 'super_admin', 'cashier'), getUsers);
+router.post('/', authorize('admin', 'super_admin'), createUser);
 
 router
   .route('/:id')
-  .get(getUser)
-  .put(updateUser)
-  .delete(deleteUser);
+  .get(authorize('admin', 'super_admin', 'cashier'), getUser)
+  .put(authorize('admin', 'super_admin'), updateUser)
+  .delete(authorize('admin', 'super_admin'), deleteUser);
 
 module.exports = router;

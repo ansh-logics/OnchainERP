@@ -1,14 +1,26 @@
 const { Sequelize } = require('sequelize');
 const mongoose = require('mongoose');
 
-// PostgreSQL Connection
+// Default matches docker-compose (postgres service) and .env.example
+const DEFAULT_POSTGRES = {
+  database: 'onchain_erp',
+  user: 'postgres',
+  password: 'postgres123',
+  host: 'localhost',
+  port: 5432
+};
+
+// Default matches docker-compose (mongodb MONGO_INITDB_DATABASE) and .env.example
+const DEFAULT_MONGODB_URI = 'mongodb://localhost:27017/onchain_erp';
+
+// PostgreSQL — structured domain data (Sequelize)
 const sequelize = new Sequelize(
-  process.env.POSTGRES_DB || 'onchain_erp',
-  process.env.POSTGRES_USER || 'anshbhatt',
-  process.env.POSTGRES_PASSWORD || '9013',
+  process.env.POSTGRES_DB || DEFAULT_POSTGRES.database,
+  process.env.POSTGRES_USER || DEFAULT_POSTGRES.user,
+  process.env.POSTGRES_PASSWORD || DEFAULT_POSTGRES.password,
   {
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: process.env.POSTGRES_PORT || 5432,
+    host: process.env.POSTGRES_HOST || DEFAULT_POSTGRES.host,
+    port: Number(process.env.POSTGRES_PORT || DEFAULT_POSTGRES.port),
     dialect: 'postgres',
     logging: process.env.NODE_ENV === 'development' ? console.log : false,
     pool: {
@@ -20,13 +32,11 @@ const sequelize = new Sequelize(
   }
 );
 
-// MongoDB Connection
+// MongoDB — system logs and unstructured documents (Mongoose)
 const connectMongoDB = async () => {
+  const uri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
   try {
-    const conn = await mongoose.connect("mongodb://localhost:27017/onchain-erp", {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const conn = await mongoose.connect(uri);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`Error connecting to MongoDB: ${error.message}`);
@@ -34,13 +44,11 @@ const connectMongoDB = async () => {
   }
 };
 
-// PostgreSQL Connection Test
 const connectPostgreSQL = async () => {
   try {
     await sequelize.authenticate();
     console.log('PostgreSQL connection has been established successfully.');
-    
-    // Sync models in development
+
     if (process.env.NODE_ENV === 'development') {
       await sequelize.sync({ alter: true });
       console.log('PostgreSQL models synchronized.');
@@ -51,7 +59,6 @@ const connectPostgreSQL = async () => {
   }
 };
 
-// Initialize both databases
 const connectDatabases = async () => {
   await connectPostgreSQL();
   await connectMongoDB();

@@ -1,7 +1,4 @@
-// TEMPORARILY DISABLED - Role management needs to be updated for PostgreSQL
-// const mongoose = require('mongoose');
-// const Role = require('../models/mongodb_deprecated/Role');
-// const Permission = require('../models/mongodb_deprecated/Permission');
+// TEMPORARILY DISABLED — role/permission tables belong in PostgreSQL when implemented
 
 /**
  * Initialize default roles and permissions

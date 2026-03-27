@@ -1,8 +1,7 @@
-// Main Models Index - Hybrid Database Architecture
-// PostgreSQL models for structured data
-// MongoDB models for unstructured data
+// Hybrid database layout:
+// - PostgreSQL (Sequelize): structured domain entities
+// - MongoDB (Mongoose): system logs + unstructured / flexible documents only
 
-// PostgreSQL Models (Structured Data)
 const PostgreSQLModels = require('./postgresql');
 const {
   User,
@@ -17,19 +16,16 @@ const {
   sequelize
 } = PostgreSQLModels;
 
-// MongoDB Models (Unstructured Data)
-const MongoDBModels = require('./mongodb');
+const MongoUnstructuredModels = require('./mongodb');
 const {
   FileUpload,
   SystemLog,
   Analytics,
   Notification,
   Configuration
-} = MongoDBModels;
+} = MongoUnstructuredModels;
 
-// Export all models with clear naming
 module.exports = {
-  // PostgreSQL Models
   User,
   College,
   Department,
@@ -40,15 +36,13 @@ module.exports = {
   Transaction,
   Lab,
   sequelize,
-  
-  // MongoDB Models
+
   FileUpload,
   SystemLog,
   Analytics,
   Notification,
   Configuration,
-  
-  // Grouped exports for convenience
+
   PostgreSQL: PostgreSQLModels,
-  MongoDB: MongoDBModels
+  MongoUnstructured: MongoUnstructuredModels
 };

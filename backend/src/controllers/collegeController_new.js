@@ -1,5 +1,4 @@
 const { College, Department, User } = require('../models');
-const { SystemLog } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 const bcrypt = require('bcryptjs');

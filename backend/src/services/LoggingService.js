@@ -3,11 +3,11 @@ const { SystemLog } = require('../models/mongodb');
 class LoggingService {
   static async log(level, event, action, userId, data = {}, options = {}) {
     try {
-      const logEntry = new SystemLog({
+      const hasUserId = userId != null && userId !== '';
+      const doc = {
         level,
         event,
         action,
-        userId,
         userRole: options.userRole,
         collegeId: options.collegeId,
         ip: options.ip,
@@ -17,7 +17,15 @@ class LoggingService {
         data,
         duration: options.duration,
         status: options.status || 'success'
-      });
+      };
+      if (hasUserId) {
+        doc.userId = String(userId);
+      }
+      if (options.error) {
+        doc.error = options.error;
+      }
+
+      const logEntry = new SystemLog(doc);
 
       await logEntry.save();
       return logEntry;
@@ -28,7 +36,14 @@ class LoggingService {
   }
 
   static async logError(event, action, userId, error, options = {}) {
-    return this.log('error', event, action, userId, {}, {
+    const hasUserId = userId != null && userId !== '';
+    // SystemLog requires userId unless action === 'system'
+    const effectiveAction = hasUserId ? action : 'system';
+    const data = hasUserId
+      ? {}
+      : { originalAction: action };
+
+    return this.log('error', event, effectiveAction, hasUserId ? userId : undefined, data, {
       ...options,
       status: 'error',
       error: {

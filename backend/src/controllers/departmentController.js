@@ -1,8 +1,19 @@
-const { Department, College, User, Course, Section } = require('../models');
+const { Department, College, User, Faculty, Course, Section } = require('../models');
 // const Lab = require('../models/Lab'); // TODO: Update Lab model for PostgreSQL
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 const rollNumberGenerator = require('../utils/rollNumberGenerator');
+
+async function resolveUserCollegeId(userInstance) {
+  const plain = userInstance.get ? userInstance.get({ plain: true }) : userInstance;
+  if (plain.studentProfile?.collegeId) return plain.studentProfile.collegeId;
+  if (plain.facultyProfile?.collegeId) return plain.facultyProfile.collegeId;
+  const college = await College.findOne({
+    where: { adminId: plain.id },
+    attributes: ['id']
+  });
+  return college?.id || null;
+}
 
 // @desc    Create a new department
 // @route   POST /api/departments
@@ -72,28 +83,62 @@ const createDepartment = async (req, res, next) => {
 // @access  Private
 const getDepartments = async (req, res, next) => {
   try {
-    let query = {};
+    let where = {};
 
-    // Debug logging
-    console.log('Get Departments - User role:', req.user.role);
-    console.log('Get Departments - User college:', req.user.college);
-
-    // If not super admin, only show departments from user's college
     if (req.user.role !== 'super_admin') {
-      // Handle case where user.college might be an ObjectId or populated object
-      const userCollegeId = req.user.college?._id || req.user.college;
-      query.college = userCollegeId;
+      const userCollegeId = await resolveUserCollegeId(req.user);
+      if (!userCollegeId) {
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          data: []
+        });
+      }
+      where.collegeId = userCollegeId;
     }
 
-    const departments = await Department.find(query)
-      .populate('college', 'name shortName')
-      .populate('hod', 'name email')
-      .sort({ name: 1 });
+    const departments = await Department.findAll({
+      where,
+      include: [
+        { model: College, as: 'college', attributes: ['id', 'name', 'shortName'] },
+        {
+          model: Faculty,
+          as: 'hod',
+          required: false,
+          attributes: ['id', 'employeeId'],
+          include: [{ model: User, as: 'user', attributes: ['name', 'email'] }]
+        }
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    const data = departments.map((d) => {
+      const row = d.get({ plain: true });
+      return {
+        ...row,
+        _id: row.id,
+        college: row.college
+          ? {
+              _id: row.college.id,
+              name: row.college.name,
+              shortName: row.college.shortName
+            }
+          : null,
+        hod: row.hod
+          ? {
+              _id: row.hod.id,
+              employeeId: row.hod.employeeId,
+              name: row.hod.user?.name,
+              email: row.hod.user?.email
+            }
+          : null
+      };
+    });
 
     res.status(200).json({
       success: true,
-      count: departments.length,
-      data: departments
+      count: data.length,
+      data
     });
   } catch (error) {
     console.error('Get departments error:', error);

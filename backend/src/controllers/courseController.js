@@ -1,18 +1,87 @@
-const { Course, Faculty, Student, Department } = require('../models');
+const { Course, Faculty, Student, Department, College, User } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
-const LoggingService = require('../services/LoggingService');
+
+const TYPE_UI_TO_DB = {
+  Core: 'Core',
+  Elective: 'Elective',
+  Lab: 'Laboratory',
+  Project: 'Project'
+};
+
+const TYPE_DB_TO_UI = {
+  Core: 'Core',
+  Elective: 'Elective',
+  Laboratory: 'Lab',
+  Project: 'Project',
+  Internship: 'Internship'
+};
+
+function mapCourseTypeToDb(uiType) {
+  if (!uiType) return 'Core';
+  return TYPE_UI_TO_DB[uiType] || uiType;
+}
+
+function mapCourseTypeToUi(dbType) {
+  return TYPE_DB_TO_UI[dbType] || dbType;
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(s) {
+  return typeof s === 'string' && UUID_RE.test(s);
+}
+
+async function resolveUserCollegeId(userInstance) {
+  const plain = userInstance.get ? userInstance.get({ plain: true }) : userInstance;
+  if (plain.studentProfile?.collegeId) return plain.studentProfile.collegeId;
+  if (plain.facultyProfile?.collegeId) return plain.facultyProfile.collegeId;
+  const college = await College.findOne({
+    where: { adminId: plain.id },
+    attributes: ['id']
+  });
+  return college?.id || null;
+}
+
+function serializeCourse(row) {
+  const c = row.get ? row.get({ plain: true }) : row;
+  return {
+    _id: c.id,
+    id: c.id,
+    code: c.code,
+    name: c.name,
+    description: c.description,
+    credits: c.credits,
+    semester: c.semester,
+    type: mapCourseTypeToUi(c.courseType),
+    courseType: c.courseType,
+    department: c.department?.name || '',
+    collegeId: c.collegeId,
+    departmentId: c.departmentId,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt
+  };
+}
+
+const courseInclude = [
+  { model: Department, as: 'department', attributes: ['id', 'name', 'shortName'] },
+  { model: College, as: 'college', attributes: ['id', 'name', 'shortName'] }
+];
 
 // @desc    Get all courses
 // @route   GET /api/courses
 // @access  Private
 exports.getCourses = async (req, res, next) => {
   try {
-    const courses = await Course.find();
-    
+    const courses = await Course.findAll({
+      include: courseInclude,
+      order: [['createdAt', 'DESC']]
+    });
+
     res.status(200).json({
       success: true,
       count: courses.length,
-      data: courses
+      data: courses.map((c) => serializeCourse(c))
     });
   } catch (error) {
     next(error);
@@ -24,24 +93,10 @@ exports.getCourses = async (req, res, next) => {
 // @access  Private
 exports.getCourse = async (req, res, next) => {
   try {
-    const course = await Course.findById(req.params.id)
-      .populate('faculty', 'employeeId')
-      .populate({
-        path: 'faculty',
-        populate: {
-          path: 'user',
-          select: 'name email'
-        }
-      })
-      .populate({
-        path: 'students',
-        select: 'enrollmentNumber',
-        populate: {
-          path: 'user',
-          select: 'name email'
-        }
-      });
-    
+    const course = await Course.findByPk(req.params.id, {
+      include: courseInclude
+    });
+
     if (!course) {
       return next(
         new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
@@ -50,7 +105,11 @@ exports.getCourse = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: course
+      data: {
+        ...serializeCourse(course),
+        faculty: null,
+        students: []
+      }
     });
   } catch (error) {
     next(error);
@@ -62,35 +121,64 @@ exports.getCourse = async (req, res, next) => {
 // @access  Private/Admin
 exports.createCourse = async (req, res, next) => {
   try {
-    // Use college from request body or default to admin's college
-    const collegeId = req.body.college || req.user.college;
-    
-    // If department is provided as a string, find the department ObjectId
-    let departmentId = req.body.department;
-    if (typeof req.body.department === 'string') {
-      const department = await Department.findOne({
-        name: req.body.department,
-        college: collegeId
-      });
-      
-      if (department) {
-        departmentId = department._id;
-      } else {
-        return next(new ErrorResponse(`Department '${req.body.department}' not found`, 404));
-      }
+    let collegeId = req.body.college;
+    if (collegeId && typeof collegeId === 'object' && collegeId._id) {
+      collegeId = collegeId._id;
     }
-    
-    const courseData = {
-      ...req.body,
-      college: collegeId,
-      department: departmentId
-    };
-    
-    const course = await Course.create(courseData);
+    if (!collegeId) {
+      collegeId = await resolveUserCollegeId(req.user);
+    }
+    if (!collegeId) {
+      return next(new ErrorResponse('College is required', 400));
+    }
+
+    let departmentId = req.body.department;
+    if (typeof departmentId === 'string' && !isUuid(departmentId)) {
+      const department = await Department.findOne({
+        where: { name: departmentId, collegeId }
+      });
+
+      if (!department) {
+        return next(
+          new ErrorResponse(`Department '${req.body.department}' not found`, 404)
+        );
+      }
+      departmentId = department.id;
+    }
+
+    if (!departmentId) {
+      return next(new ErrorResponse('Department is required', 400));
+    }
+
+    const courseType = mapCourseTypeToDb(req.body.type || req.body.courseType);
+    const prerequisites =
+      req.body.prerequisites && String(req.body.prerequisites).trim()
+        ? JSON.stringify(
+            String(req.body.prerequisites)
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          )
+        : null;
+
+    const course = await Course.create({
+      collegeId,
+      departmentId,
+      code: req.body.code,
+      name: req.body.name,
+      shortName: req.body.shortName || req.body.name?.slice(0, 40) || req.body.code,
+      description: req.body.description || '',
+      credits: req.body.credits,
+      semester: req.body.semester,
+      courseType,
+      prerequisites
+    });
+
+    const withAssoc = await Course.findByPk(course.id, { include: courseInclude });
 
     res.status(201).json({
       success: true,
-      data: course
+      data: serializeCourse(withAssoc)
     });
   } catch (error) {
     next(error);
@@ -102,22 +190,58 @@ exports.createCourse = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateCourse = async (req, res, next) => {
   try {
-    let course = await Course.findById(req.params.id);
-    
+    const course = await Course.findByPk(req.params.id);
+
     if (!course) {
       return next(
         new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
       );
     }
 
-    course = await Course.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
+    const patch = {};
+    if (req.body.code !== undefined) patch.code = req.body.code;
+    if (req.body.name !== undefined) patch.name = req.body.name;
+    if (req.body.description !== undefined) patch.description = req.body.description;
+    if (req.body.shortName !== undefined) patch.shortName = req.body.shortName;
+    if (req.body.credits !== undefined) patch.credits = req.body.credits;
+    if (req.body.semester !== undefined) patch.semester = req.body.semester;
+    if (req.body.isActive !== undefined) patch.isActive = req.body.isActive;
+    if (req.body.type !== undefined || req.body.courseType !== undefined) {
+      patch.courseType = mapCourseTypeToDb(req.body.type || req.body.courseType);
+    }
+    if (req.body.prerequisites !== undefined) {
+      patch.prerequisites =
+        req.body.prerequisites && String(req.body.prerequisites).trim()
+          ? JSON.stringify(
+              String(req.body.prerequisites)
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            )
+          : null;
+    }
+
+    if (req.body.department !== undefined) {
+      const d = req.body.department;
+      if (typeof d === 'string' && !isUuid(d)) {
+        const department = await Department.findOne({
+          where: { name: d, collegeId: course.collegeId }
+        });
+        if (!department) {
+          return next(new ErrorResponse(`Department '${d}' not found`, 404));
+        }
+        patch.departmentId = department.id;
+      } else if (isUuid(d)) {
+        patch.departmentId = d;
+      }
+    }
+
+    await course.update(patch);
+    const updated = await Course.findByPk(course.id, { include: courseInclude });
 
     res.status(200).json({
       success: true,
-      data: course
+      data: serializeCourse(updated)
     });
   } catch (error) {
     next(error);
@@ -129,29 +253,15 @@ exports.updateCourse = async (req, res, next) => {
 // @access  Private/Admin
 exports.deleteCourse = async (req, res, next) => {
   try {
-    const course = await Course.findById(req.params.id);
-    
+    const course = await Course.findByPk(req.params.id);
+
     if (!course) {
       return next(
         new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
       );
     }
 
-    // Remove course from all students
-    await Student.updateMany(
-      { courses: req.params.id },
-      { $pull: { courses: req.params.id } }
-    );
-
-    // Remove course from faculty
-    if (course.faculty) {
-      await Faculty.updateOne(
-        { _id: course.faculty },
-        { $pull: { courses: req.params.id } }
-      );
-    }
-
-    await course.deleteOne();
+    await course.destroy();
 
     res.status(200).json({
       success: true,
@@ -166,48 +276,12 @@ exports.deleteCourse = async (req, res, next) => {
 // @route   PUT /api/courses/:id/faculty/:facultyId
 // @access  Private/Admin
 exports.assignFaculty = async (req, res, next) => {
-  try {
-    const course = await Course.findById(req.params.id);
-    
-    if (!course) {
-      return next(
-        new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
-      );
-    }
-
-    const faculty = await Faculty.findById(req.params.facultyId);
-    
-    if (!faculty) {
-      return next(
-        new ErrorResponse(`Faculty not found with id of ${req.params.facultyId}`, 404)
-      );
-    }
-
-    // If course already has a different faculty, remove course from that faculty
-    if (course.faculty && course.faculty.toString() !== req.params.facultyId) {
-      await Faculty.updateOne(
-        { _id: course.faculty },
-        { $pull: { courses: req.params.id } }
-      );
-    }
-
-    // Update course with new faculty
-    course.faculty = req.params.facultyId;
-    await course.save();
-
-    // Add course to faculty's courses if not already there
-    if (!faculty.courses.includes(req.params.id)) {
-      faculty.courses.push(req.params.id);
-      await faculty.save();
-    }
-
-    res.status(200).json({
-      success: true,
-      data: course
-    });
-  } catch (error) {
-    next(error);
-  }
+  return next(
+    new ErrorResponse(
+      'Assigning faculty to a course is not supported in the current schema (use sections / class teachers).',
+      501
+    )
+  );
 };
 
 // @desc    Get course students
@@ -215,32 +289,51 @@ exports.assignFaculty = async (req, res, next) => {
 // @access  Private/Faculty or Admin
 exports.getCourseStudents = async (req, res, next) => {
   try {
-    const course = await Course.findById(req.params.id);
-    
+    const course = await Course.findByPk(req.params.id);
+
     if (!course) {
       return next(
         new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
       );
     }
 
-    // If faculty, check if they're assigned to this course
     if (req.user.role === 'faculty') {
-      const faculty = await Faculty.findOne({ user: req.user.id });
-      
-      if (!faculty || !faculty.courses.includes(req.params.id)) {
+      const faculty = await Faculty.findOne({ where: { userId: req.user.id } });
+
+      if (!faculty || faculty.departmentId !== course.departmentId) {
         return next(
           new ErrorResponse(`Not authorized to access this course's students`, 403)
         );
       }
     }
 
-    const students = await Student.find({ courses: req.params.id })
-      .populate('user', 'name email contactNumber');
+    const students = await Student.findAll({
+      where: {
+        departmentId: course.departmentId,
+        currentSemester: course.semester
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['name', 'email', 'phone']
+        }
+      ]
+    });
+
+    const data = students.map((s) => {
+      const row = s.get({ plain: true });
+      return {
+        ...row,
+        _id: row.id,
+        contactNumber: row.user?.phone
+      };
+    });
 
     res.status(200).json({
       success: true,
-      count: students.length,
-      data: students
+      count: data.length,
+      data
     });
   } catch (error) {
     next(error);
@@ -252,8 +345,8 @@ exports.getCourseStudents = async (req, res, next) => {
 // @access  Private
 exports.getCourseAssignments = async (req, res, next) => {
   try {
-    const course = await Course.findById(req.params.id);
-    
+    const course = await Course.findByPk(req.params.id);
+
     if (!course) {
       return next(
         new ErrorResponse(`Course not found with id of ${req.params.id}`, 404)
@@ -262,8 +355,8 @@ exports.getCourseAssignments = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      count: course.assignments.length,
-      data: course.assignments
+      count: 0,
+      data: []
     });
   } catch (error) {
     next(error);
@@ -276,24 +369,30 @@ exports.getCourseAssignments = async (req, res, next) => {
 exports.getCoursesByDepartmentAndSemester = async (req, res, next) => {
   try {
     const { department, semester } = req.params;
-    
-    const courses = await Course.find({
-      department: department,
-      semester: parseInt(semester)
-    }).populate('faculty', 'employeeId')
-      .populate({
-        path: 'faculty',
-        populate: {
-          path: 'user',
-          select: 'name email'
-        }
-      });
-    
+    const sem = parseInt(semester, 10);
+
+    let dept = await Department.findByPk(department);
+    if (!dept) {
+      dept = await Department.findOne({ where: { name: department } });
+    }
+    if (!dept) {
+      return next(new ErrorResponse('Department not found', 404));
+    }
+
+    const courses = await Course.findAll({
+      where: {
+        departmentId: dept.id,
+        semester: sem
+      },
+      include: courseInclude,
+      order: [['code', 'ASC']]
+    });
+
     res.status(200).json({
       success: true,
       count: courses.length,
-      data: courses,
-      message: `Found ${courses.length} courses for ${department} department, semester ${semester}`
+      data: courses.map((c) => serializeCourse(c)),
+      message: `Found ${courses.length} courses for ${dept.name} department, semester ${sem}`
     });
   } catch (error) {
     next(error);

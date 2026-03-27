@@ -1,38 +1,90 @@
-const { User, Student, Faculty, Course, Department } = require('../models');
+const { User, Student, Faculty, Course, Department, College } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
+
+async function resolveUserCollegeId(userInstance) {
+  const plain = userInstance.get ? userInstance.get({ plain: true }) : userInstance;
+  if (plain.studentProfile?.collegeId) return plain.studentProfile.collegeId;
+  if (plain.facultyProfile?.collegeId) return plain.facultyProfile.collegeId;
+  const college = await College.findOne({
+    where: { adminId: plain.id },
+    attributes: ['id']
+  });
+  return college?.id || null;
+}
 
 // @desc    Get system dashboard statistics
 // @route   GET /api/admin/dashboard
 // @access  Private/Admin
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    // Count users by role
-    const totalStudents = await User.countDocuments({ role: 'student' });
-    const totalFaculty = await User.countDocuments({ role: 'faculty' });
-    const totalAdmin = await User.countDocuments({ role: 'admin' });
-    
-    // Count courses
-    const totalCourses = await Course.countDocuments();
-    
-    // Get departments from Department collection
-    let query = {};
-    // If not super admin, only show departments from user's college
-    if (req.user.role !== 'super_admin') {
-      const userCollegeId = req.user.college?._id || req.user.college;
-      query.college = userCollegeId;
+    const totalStudents = await User.count({ where: { role: 'student' } });
+    const totalFaculty = await User.count({ where: { role: 'faculty' } });
+    const totalAdmin = await User.count({ where: { role: 'admin' } });
+
+    const totalCourses = await Course.count();
+
+    let departments = [];
+    if (req.user.role === 'super_admin') {
+      departments = await Department.findAll({
+        attributes: ['name', 'shortName'],
+        order: [['name', 'ASC']]
+      });
+    } else {
+      const userCollegeId = await resolveUserCollegeId(req.user);
+      if (userCollegeId) {
+        departments = await Department.findAll({
+          where: { collegeId: userCollegeId },
+          attributes: ['name', 'shortName'],
+          order: [['name', 'ASC']]
+        });
+      }
     }
-    
-    const departments = await Department.find(query).select('name shortName');
+
     const totalDepartments = departments.length;
-    const departmentNames = departments.map(dept => dept.name);
-    
-    // Get recent users
-    const recentUsers = await User.find()
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select('name email role department createdAt');
-    
+    const departmentNames = departments.map((d) => d.name);
+
+    const recentRows = await User.findAll({
+      attributes: ['id', 'name', 'email', 'role', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit: 5,
+      include: [
+        {
+          association: 'studentProfile',
+          attributes: ['id'],
+          required: false,
+          include: [
+            { association: 'department', attributes: ['name'], required: false }
+          ]
+        },
+        {
+          association: 'facultyProfile',
+          attributes: ['id'],
+          required: false,
+          include: [
+            { association: 'department', attributes: ['name'], required: false }
+          ]
+        }
+      ]
+    });
+
+    const recentUsers = recentRows.map((u) => {
+      const row = u.get({ plain: true });
+      const departmentName =
+        row.studentProfile?.department?.name ||
+        row.facultyProfile?.department?.name ||
+        undefined;
+      return {
+        _id: row.id,
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: row.role,
+        department: departmentName,
+        createdAt: row.createdAt
+      };
+    });
+
     res.status(200).json({
       success: true,
       data: {
