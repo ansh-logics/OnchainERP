@@ -1,4 +1,4 @@
-const { Faculty, Student, Course, User } = require('../models');
+const { Faculty, Student, Course, User, College, Department, sequelize } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 
@@ -420,6 +420,7 @@ exports.getFacultyDashboard = async (req, res, next) => {
 // @route   POST /api/faculty
 // @access  Private/Admin only
 exports.createFaculty = async (req, res, next) => {
+  const tx = await sequelize.transaction();
   try {
     const {
       name,
@@ -436,35 +437,83 @@ exports.createFaculty = async (req, res, next) => {
       college
     } = req.body;
 
-    // Use college from request or default to admin's college
-    const userCollege = college || req.user.college;
+    let resolvedCollegeId =
+      college ||
+      req.user?.studentProfile?.collegeId ||
+      req.user?.facultyProfile?.collegeId ||
+      null;
 
-    // Create user first
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role: 'faculty',
-      college: userCollege,
-      department,
-      contactNumber,
-      address
+    if (!resolvedCollegeId) {
+      const adminCollege = await College.findOne({
+        where: { adminId: req.user.id },
+        attributes: ['id'],
+        transaction: tx
+      });
+      resolvedCollegeId = adminCollege?.id || null;
+    }
+
+    if (!resolvedCollegeId) {
+      await tx.rollback();
+      return next(new ErrorResponse('Unable to resolve college for this admin.', 400));
+    }
+
+    let departmentRecord = null;
+    if (department) {
+      departmentRecord = await Department.findOne({
+        where: {
+          collegeId: resolvedCollegeId,
+          ...(String(department).includes('-')
+            ? { id: department }
+            : { name: department })
+        },
+        attributes: ['id'],
+        transaction: tx
+      });
+    }
+
+    if (!departmentRecord) {
+      await tx.rollback();
+      return next(new ErrorResponse('Selected department is invalid for your college.', 400));
+    }
+
+    const user = await User.create(
+      {
+        name,
+        email: String(email || '').trim().toLowerCase(),
+        password,
+        role: 'faculty',
+        phone: contactNumber || null
+      },
+      { transaction: tx }
+    );
+
+    const faculty = await Faculty.create(
+      {
+        userId: user.id,
+        collegeId: resolvedCollegeId,
+        departmentId: departmentRecord.id,
+        employeeId: facultyId,
+        facultyId,
+        designation,
+        qualification: qualification || 'Not specified',
+        experience: experience ? parseInt(String(experience), 10) : null,
+        specialization: specialization || null,
+        joiningDate: new Date().toISOString().slice(0, 10),
+        employmentType: 'Permanent',
+        dateOfBirth: '1990-01-01',
+        gender: 'Male',
+        personalEmail: String(email || '').trim().toLowerCase(),
+        personalPhone: contactNumber || null,
+        addressStreet: address || null
+      },
+      { transaction: tx }
+    );
+
+    await tx.commit();
+
+    const populatedFaculty = await Faculty.findByPk(faculty.id, {
+      include: [{ model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }]
     });
-
-    // Create faculty
-    const faculty = await Faculty.create({
-      user: user._id,
-      facultyId,
-      designation,
-      qualification,
-      experience,
-      specialization,
-      department
-    });
-
-    // Populate the response
-    const populatedFaculty = await Faculty.findById(faculty._id)
-      .populate('user', 'name email contactNumber department');
 
     res.status(201).json({
       success: true,
@@ -472,6 +521,11 @@ exports.createFaculty = async (req, res, next) => {
       message: `Faculty created successfully`
     });
   } catch (error) {
+    await tx.rollback();
+    if (error?.name === 'SequelizeUniqueConstraintError') {
+      const duplicateField = error?.errors?.[0]?.path || 'field';
+      return next(new ErrorResponse(`A faculty/user with this ${duplicateField} already exists.`, 409));
+    }
     next(error);
   }
 };

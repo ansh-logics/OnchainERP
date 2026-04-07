@@ -12,12 +12,10 @@ import { AddDepartmentModal } from "./add-department-modal"
 import {
   Users,
   BookOpen,
-  TrendingUp,
   AlertTriangle,
   UserCheck,
   Building,
   Download,
-  Plus,
   Settings,
   User,
 } from "lucide-react"
@@ -119,7 +117,7 @@ export function AdminDashboard() {
     }
   }
 
-  const convertToCSV = (data: any[]) => {
+  const convertToCSV = (data: Array<Record<string, unknown>>) => {
     if (!data.length) return ""
     
     const headers = Object.keys(data[0]).join(',')
@@ -143,10 +141,10 @@ export function AdminDashboard() {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="mb-4 h-8 w-1/4 rounded bg-gray-200"></div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+              <div key={i} className="h-28 rounded-xl bg-gray-200"></div>
             ))}
           </div>
         </div>
@@ -169,33 +167,29 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {/* Welcome Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Monitor and manage your institution's operations</p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Admin Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Monitor and manage your institution operations.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={generateAttendanceReport}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="shadow-none" onClick={generateAttendanceReport}>
             <Download className="h-4 w-4 mr-2" />
             Attendance Report
           </Button>
-          <Button variant="outline" size="sm" onClick={generateGradeReport}>
+          <Button variant="outline" size="sm" className="shadow-none" onClick={generateGradeReport}>
             <Download className="h-4 w-4 mr-2" />
             Grade Report
-          </Button>
-          <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add User
           </Button>
         </div>
       </div>
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="border-border/60 shadow-none transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Total Students</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -205,8 +199,8 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="border-border/60 shadow-none transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Total Faculty</CardTitle>
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -216,8 +210,8 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="border-border/60 shadow-none transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -227,8 +221,8 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Card className="border-border/60 shadow-none transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <CardTitle className="text-sm font-medium">Departments</CardTitle>
             <Building className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -240,32 +234,32 @@ export function AdminDashboard() {
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex space-x-2 border-b border-border">
+      <div className="inline-flex w-full flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/40 p-1">
         <Button
           variant={activeTab === "overview" ? "default" : "ghost"}
           onClick={() => setActiveTab("overview")}
-          className="rounded-b-none"
+          className="h-9 rounded-lg px-4 transition-[background-color,color,transform] duration-200 ease-out active:scale-[0.99]"
         >
           Overview
         </Button>
         <Button
           variant={activeTab === "users" ? "default" : "ghost"}
           onClick={() => setActiveTab("users")}
-          className="rounded-b-none"
+          className="h-9 rounded-lg px-4 transition-[background-color,color,transform] duration-200 ease-out active:scale-[0.99]"
         >
           Recent Users
         </Button>
         <Button
           variant={activeTab === "departments" ? "default" : "ghost"}
           onClick={() => setActiveTab("departments")}
-          className="rounded-b-none"
+          className="h-9 rounded-lg px-4 transition-[background-color,color,transform] duration-200 ease-out active:scale-[0.99]"
         >
           Departments
         </Button>
         <Button
           variant={activeTab === "reports" ? "default" : "ghost"}
           onClick={() => setActiveTab("reports")}
-          className="rounded-b-none"
+          className="h-9 rounded-lg px-4 transition-[background-color,color,transform] duration-200 ease-out active:scale-[0.99]"
         >
           Reports
         </Button>
@@ -277,22 +271,22 @@ export function AdminDashboard() {
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {/* User Distribution Chart */}
-              <Card className="col-span-2">
+              <Card className="col-span-2 border-border/60 shadow-none">
                 <CardHeader>
                   <CardTitle>User Distribution</CardTitle>
                   <CardDescription>Overview of users by role</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Students</span>
                       <span className="text-sm text-muted-foreground">
                         {dashboardData?.userStats.totalStudents || 0}
                       </span>
                     </div>
-                    <Progress 
+                    <Progress
                       value={(dashboardData?.userStats.totalStudents || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
-                      className="h-2"
+                      className="h-1.5"
                     />
                     
                     <div className="flex items-center justify-between">
@@ -301,9 +295,9 @@ export function AdminDashboard() {
                         {dashboardData?.userStats.totalFaculty || 0}
                       </span>
                     </div>
-                    <Progress 
+                    <Progress
                       value={(dashboardData?.userStats.totalFaculty || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
-                      className="h-2"
+                      className="h-1.5"
                     />
                     
                     <div className="flex items-center justify-between">
@@ -312,16 +306,16 @@ export function AdminDashboard() {
                         {dashboardData?.userStats.totalAdmin || 0}
                       </span>
                     </div>
-                    <Progress 
+                    <Progress
                       value={(dashboardData?.userStats.totalAdmin || 0) / (dashboardData?.userStats.totalUsers || 1) * 100} 
-                      className="h-2"
+                      className="h-1.5"
                     />
                   </div>
                 </CardContent>
               </Card>
 
               {/* Quick Actions */}
-              <Card>
+              <Card className="border-border/60 shadow-none">
                 <CardHeader>
                   <CardTitle>Quick Actions</CardTitle>
                   <CardDescription>Common administrative tasks</CardDescription>
@@ -331,7 +325,7 @@ export function AdminDashboard() {
                   <AddFacultyModal onFacultyAdded={fetchDashboardData} />
                   <AddCourseModal onCourseAdded={fetchDashboardData} />
                   <AddDepartmentModal onDepartmentAdded={fetchDashboardData} />
-                  <Button variant="outline" className="w-full justify-start">
+                  <Button variant="outline" className="w-full justify-start shadow-none">
                     <Settings className="h-4 w-4 mr-2" />
                     System Settings
                   </Button>
@@ -342,7 +336,7 @@ export function AdminDashboard() {
         )}
 
         {activeTab === "users" && (
-          <Card>
+          <Card className="border-border/60 shadow-none">
             <CardHeader>
               <CardTitle>Recent Users</CardTitle>
               <CardDescription>Latest user registrations</CardDescription>
@@ -350,9 +344,9 @@ export function AdminDashboard() {
             <CardContent>
               <div className="space-y-4">
                 {dashboardData?.recentUsers.map((user) => (
-                  <div key={user._id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div key={user._id} className="flex items-center justify-between rounded-xl border border-border/70 p-3.5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                         <User className="h-5 w-5 text-primary" />
                       </div>
                       <div>
@@ -376,7 +370,7 @@ export function AdminDashboard() {
         )}
 
         {activeTab === "departments" && (
-          <Card>
+          <Card className="border-border/60 shadow-none">
             <CardHeader>
               <CardTitle>Departments</CardTitle>
               <CardDescription>Available academic departments</CardDescription>
@@ -385,7 +379,7 @@ export function AdminDashboard() {
               {dashboardData?.departmentStats.departments && dashboardData.departmentStats.departments.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {dashboardData.departmentStats.departments.map((dept, index) => (
-                    <Card key={index}>
+                    <Card key={index} className="border-border/60 shadow-none">
                       <CardContent className="pt-6">
                         <div className="flex items-center gap-2">
                           <Building className="h-5 w-5 text-primary" />
@@ -409,7 +403,7 @@ export function AdminDashboard() {
 
         {activeTab === "reports" && (
           <div className="grid gap-4 md:grid-cols-2">
-            <Card>
+            <Card className="border-border/60 shadow-none">
               <CardHeader>
                 <CardTitle>Attendance Reports</CardTitle>
                 <CardDescription>Generate detailed attendance reports</CardDescription>
@@ -425,7 +419,7 @@ export function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-border/60 shadow-none">
               <CardHeader>
                 <CardTitle>Grade Reports</CardTitle>
                 <CardDescription>Generate comprehensive grade reports</CardDescription>

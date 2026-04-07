@@ -84,6 +84,10 @@ exports.getCourses = async (req, res, next) => {
       data: courses.map((c) => serializeCourse(c))
     });
   } catch (error) {
+    if (error?.name === 'SequelizeUniqueConstraintError') {
+      const duplicateField = error?.errors?.[0]?.path || 'field';
+      return next(new ErrorResponse(`A course with this ${duplicateField} already exists.`, 409));
+    }
     next(error);
   }
 };
@@ -112,6 +116,10 @@ exports.getCourse = async (req, res, next) => {
       }
     });
   } catch (error) {
+    if (error?.name === 'SequelizeUniqueConstraintError') {
+      const duplicateField = error?.errors?.[0]?.path || 'field';
+      return next(new ErrorResponse(`A course with this ${duplicateField} already exists.`, 409));
+    }
     next(error);
   }
 };

@@ -1,4 +1,4 @@
-const { Student, User, Course } = require('../models');
+const { Student, User, Course, College, Department, sequelize } = require('../models');
 const ErrorResponse = require('../utils/errorResponse');
 const LoggingService = require('../services/LoggingService');
 const path = require('path');
@@ -285,6 +285,7 @@ exports.registerCourse = async (req, res, next) => {
 // @route   POST /api/students
 // @access  Private/Admin only
 exports.createStudent = async (req, res, next) => {
+  const tx = await sequelize.transaction();
   try {
     const {
       name,
@@ -300,60 +301,108 @@ exports.createStudent = async (req, res, next) => {
       college
     } = req.body;
 
-    // Use college from request or default to admin's college
-    const userCollege = college || req.user.college;
+    const normalizedSemester = parseInt(String(currentSemester || 1), 10) || 1;
+    const normalizedBatch = String(batch || "").trim();
+    const inferredAdmissionYear = parseInt(normalizedBatch.slice(0, 4), 10);
+    const admissionYear = Number.isFinite(inferredAdmissionYear)
+      ? inferredAdmissionYear
+      : new Date().getFullYear();
 
-    // Create user first
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role: 'student',
-      college: userCollege,
-      department,
-      contactNumber,
-      address
-    });
+    // Resolve college for admin-created users.
+    let resolvedCollegeId =
+      college ||
+      req.user?.studentProfile?.collegeId ||
+      req.user?.facultyProfile?.collegeId ||
+      null;
 
-    // Create student
-    const student = await Student.create({
-      user: user._id,
-      enrollmentNumber,
-      batch,
-      program,
-      currentSemester,
-      department
-    });
-
-    // Auto-assign courses based on department and semester
-    const coursesToAssign = await Course.find({
-      department: department,
-      semester: currentSemester
-    });
-
-    if (coursesToAssign.length > 0) {
-      // Add courses to student
-      student.courses = coursesToAssign.map(course => course._id);
-      await student.save();
-
-      // Add student to each course
-      await Promise.all(coursesToAssign.map(async (course) => {
-        course.students.push(student._id);
-        await course.save();
-      }));
+    if (!resolvedCollegeId) {
+      const adminCollege = await College.findOne({
+        where: { adminId: req.user.id },
+        attributes: ['id'],
+        transaction: tx
+      });
+      resolvedCollegeId = adminCollege?.id || null;
     }
 
-    // Populate the response
-    const populatedStudent = await Student.findById(student._id)
-      .populate('user', 'name email contactNumber department')
-      .populate('courses', 'code name credits semester');
+    if (!resolvedCollegeId) {
+      await tx.rollback();
+      return next(new ErrorResponse('Unable to resolve college for this admin.', 400));
+    }
+
+    const departmentRecord = await Department.findOne({
+      where: { id: department, collegeId: resolvedCollegeId },
+      attributes: ['id'],
+      transaction: tx
+    });
+
+    if (!departmentRecord) {
+      await tx.rollback();
+      return next(new ErrorResponse('Selected department is invalid for your college.', 400));
+    }
+
+    const user = await User.create(
+      {
+        name,
+        email: String(email || '').trim().toLowerCase(),
+        password,
+        role: 'student',
+        phone: contactNumber || null
+      },
+      { transaction: tx }
+    );
+
+    const student = await Student.create(
+      {
+        userId: user.id,
+        collegeId: resolvedCollegeId,
+        departmentId: departmentRecord.id,
+        enrollmentNumber,
+        batch: normalizedBatch,
+        program,
+        admissionYear,
+        currentSemester: normalizedSemester,
+        dateOfBirth: '2000-01-01',
+        gender: 'Male',
+        category: 'General',
+        personalPhone: contactNumber || null,
+        personalEmail: String(email || '').trim().toLowerCase(),
+        permanentAddressStreet: address || null,
+        currentAddressStreet: address || null,
+        guardianName: `Guardian of ${name}`,
+        guardianRelation: 'Guardian',
+        guardianPhone: contactNumber || '9999999999',
+        admissionStatus: 'enrolled'
+      },
+      { transaction: tx }
+    );
+
+    // Optional course lookup for message only (course-student M2M not defined in current schema).
+    const coursesToAssign = await Course.findAll({
+      where: { departmentId: departmentRecord.id, semester: normalizedSemester },
+      attributes: ['id'],
+      transaction: tx
+    });
+
+    await tx.commit();
+
+    const populatedStudent = await Student.findByPk(student.id, {
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] },
+        { model: Department, as: 'department', attributes: ['id', 'name', 'shortName'] }
+      ]
+    });
 
     res.status(201).json({
       success: true,
       data: populatedStudent,
-      message: `Student created and automatically assigned to ${coursesToAssign.length} courses for ${department} department, semester ${currentSemester}`
+      message: `Student created successfully. ${coursesToAssign.length} matching courses found for semester ${normalizedSemester}.`
     });
   } catch (error) {
+    await tx.rollback();
+    if (error?.name === 'SequelizeUniqueConstraintError') {
+      const duplicateField = error?.errors?.[0]?.path || 'field';
+      return next(new ErrorResponse(`A user with this ${duplicateField} already exists.`, 409));
+    }
     next(error);
   }
 };

@@ -123,8 +123,8 @@ export function AddCourseModal({ onCourseAdded }: AddCourseModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="w-full justify-start">
-          <BookOpen className="h-4 w-4 mr-2" />
+        <Button className="h-10 rounded-lg px-4 font-medium shadow-none">
+          <BookOpen className="mr-2 h-4 w-4" />
           Create Course
         </Button>
       </DialogTrigger>

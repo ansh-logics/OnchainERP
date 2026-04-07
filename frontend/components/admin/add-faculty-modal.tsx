@@ -205,7 +205,7 @@ export function AddFacultyModal({ onFacultyAdded }: AddFacultyModalProps) {
                 </SelectTrigger>
                 <SelectContent>
                   {departments.map((dept) => (
-                    <SelectItem key={dept._id} value={dept.name}>{dept.name}</SelectItem>
+                    <SelectItem key={dept._id} value={dept._id}>{dept.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

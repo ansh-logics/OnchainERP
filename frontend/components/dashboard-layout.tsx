@@ -3,10 +3,11 @@
 import type React from "react"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { 
   Menu, 
   X, 
@@ -54,6 +55,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children, userRole, navigation }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
 
   const handleLogout = () => {
     localStorage.removeItem("user")
@@ -80,25 +82,29 @@ export function DashboardLayout({ children, userRole, navigation }: DashboardLay
         <div className="fixed inset-0 bg-black/20" onClick={() => setSidebarOpen(false)} />
         <div className="fixed left-0 top-0 h-full w-64 bg-card border-r border-border">
           <div className="flex h-16 items-center justify-between px-4">
-            <h2 className="text-lg font-semibold text-foreground">ERP System</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">Yukti ERP</h2>
             <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
-          <nav className="px-4 py-4">
+          <nav className="space-y-1 px-4 py-4">
             {navigation.map((item) => {
               const IconComponent = iconMap[item.icon]
+              const isActive = pathname === item.href
               return (
-                <a
+                <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground ${
-                    item.current ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+                  onClick={() => setSidebarOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-[background-color,color,transform] duration-200 ease-out ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted-foreground/15 hover:text-foreground hover:translate-x-0.5"
                   }`}
                 >
                   <IconComponent className="h-4 w-4" />
                   {item.name}
-                </a>
+                </Link>
               )
             })}
           </nav>
@@ -106,24 +112,27 @@ export function DashboardLayout({ children, userRole, navigation }: DashboardLay
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:bg-card lg:border-r lg:border-border">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:block lg:w-64 lg:bg-card lg:border-r lg:border-border/70">
         <div className="flex h-16 items-center px-6">
-          <h2 className="text-lg font-semibold text-foreground">ERP System</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Yukti ERP</h2>
         </div>
-        <nav className="px-4 py-4">
+        <nav className="space-y-1 px-4 py-4">
           {navigation.map((item) => {
             const IconComponent = iconMap[item.icon]
+            const isActive = pathname === item.href
             return (
-              <a
+              <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground ${
-                  item.current ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-[background-color,color,transform] duration-200 ease-out ${
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted-foreground/15 hover:text-foreground hover:translate-x-0.5"
                 }`}
               >
                 <IconComponent className="h-4 w-4" />
                 {item.name}
-              </a>
+              </Link>
             )
           })}
         </nav>
@@ -132,7 +141,7 @@ export function DashboardLayout({ children, userRole, navigation }: DashboardLay
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 items-center gap-x-4 border-b border-border bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <div className="sticky top-0 z-40 flex h-16 items-center gap-x-4 border-b border-border/70 bg-background/95 px-4 backdrop-blur sm:gap-x-6 sm:px-6 lg:px-8">
           <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
@@ -181,7 +190,7 @@ export function DashboardLayout({ children, userRole, navigation }: DashboardLay
 
         {/* Page content */}
         <main className="py-8">
-          <div className="px-4 sm:px-6 lg:px-8">{children}</div>
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">{children}</div>
         </main>
       </div>
     </div>
