@@ -1,10 +1,13 @@
-import { LoginForm } from "@/components/login-form"
+import Link from "next/link"
 
-export default function HomePage() {
+import { Button } from "@/components/ui/button"
+import { CollegeRegistrationForm } from "@/components/college-registration-form"
+
+export default function RegisterCollegePage() {
   return (
     <div className="grid min-h-dvh bg-background lg:grid-cols-2">
       <div className="flex flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
-        <div className="flex justify-center lg:justify-start">
+        <div className="flex items-center justify-between">
           <div className="inline-flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <span className="text-sm font-semibold">E</span>
@@ -13,11 +16,14 @@ export default function HomePage() {
               Yukti ERP
             </span>
           </div>
+          <Button asChild variant="ghost" className="h-9 px-3 text-muted-foreground hover:text-foreground">
+            <Link href="/">Back</Link>
+          </Button>
         </div>
 
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-md">
-            <LoginForm />
+          <div className="w-full max-w-xl">
+            <CollegeRegistrationForm />
           </div>
         </div>
       </div>
@@ -29,3 +35,4 @@ export default function HomePage() {
     </div>
   )
 }
+

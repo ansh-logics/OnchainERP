@@ -174,7 +174,10 @@ exports.register = async (req, res, next) => {
 // @access  Public
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const rawEmail = req.body?.email;
+    const password = req.body?.password;
+    const email =
+      typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
 
     // Validate email & password
     if (!email || !password) {

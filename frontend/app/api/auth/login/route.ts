@@ -42,9 +42,19 @@ export async function POST(request: NextRequest) {
     console.log('Backend response headers:', Object.fromEntries(response.headers.entries()))
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Authentication failed' }))
+      const errorData = (await response
+        .json()
+        .catch(() => ({ error: 'Authentication failed' }))) as {
+        success?: boolean
+        error?: string
+        message?: string
+      }
       console.log('Backend error data:', errorData)
-      return NextResponse.json(errorData, { status: response.status })
+      const message = errorData.message ?? errorData.error ?? 'Authentication failed'
+      return NextResponse.json(
+        { ...errorData, success: false, message, error: errorData.error ?? message },
+        { status: response.status }
+      )
     }
     
     const payload = await response.json()
